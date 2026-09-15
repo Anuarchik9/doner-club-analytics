@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doner Club — Analytics</title>
+  <style>
+    :root {
+      --bg: #090909;
+      --panel: #121212;
+      --panel-2: #171717;
+      --line: #282828;
+      --text: #f7f7f2;
+      --muted: #8f8f8b;
+      --orange: #ff5a1f;
+      --orange-soft: rgba(255, 90, 31, .13);
+      --green: #46d693;
+      --red: #ff6b6b;
+      --shadow: 0 18px 50px rgba(0,0,0,.24);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 88% -10%, rgba(255,90,31,.12), transparent 32%),
+        radial-gradient(circle at 8% 110%, rgba(255,90,31,.06), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: -.01em;
+    }
+
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .shell { max-width: 1500px; margin: 0 auto; padding: 0 28px 56px; }
+
+    .topbar {
+      height: 82px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(18px);
+      background: rgba(9,9,9,.82);
+    }
+
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-mark {
+      width: 46px; height: 46px; border-radius: 13px;
+      display: grid; place-items: center;
+      background: var(--orange);
+      color: #fff;
+      font-size: 11px; font-weight: 1000; line-height: .85;
+      text-align: center;
+      box-shadow: 0 8px 26px rgba(255,90,31,.24);
+    }
+    .brand-copy strong { display: block; font-size: 16px; letter-spacing: .03em; }
+    .brand-copy span { color: var(--muted); font-size: 12px; }
+
+    .live-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-radius: 999px;
+      padding: 9px 13px;
+      color: #d9d9d4;
+      font-size: 12px;
+    }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(70,214,147,.08); }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      gap: 24px;
+      align-items: end;
+      padding: 46px 0 26px;
+    }
+    .eyebrow { color: var(--orange); text-transform: uppercase; font-size: 12px; font-weight: 850; letter-spacing: .14em; }
+    h1 { margin: 7px 0 6px; font-size: clamp(36px, 5vw, 70px); line-height: .95; letter-spacing: -.06em; }
+    .subtitle { color: var(--muted); font-size: 15px; margin: 0; }
+    .updated { color: var(--muted); font-size: 12px; text-align: right; }
+
+    .filters {
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      display: grid;
+      grid-template-columns: minmax(180px, 1.25fr) repeat(2, minmax(155px,.8fr)) auto;
+      gap: 12px;
+      align-items: end;
+      box-shadow: var(--shadow);
+    }
+    .field label { display: block; color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 7px 3px; }
+    .field select, .field input {
+      width: 100%; height: 48px;
+      border: 1px solid #303030;
+      border-radius: 13px;
+      background: #0d0d0d;
+      color: #fff;
+      padding: 0 13px;
+      outline: none;
+    }
+    .field select:focus, .field input:focus { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,90,31,.08); }
+    .apply {
+      height: 48px; border: 0; border-radius: 13px; padding: 0 22px;
+      background: var(--orange); color: #fff; font-weight: 850;
+      box-shadow: 0 10px 26px rgba(255,90,31,.18);
+    }
+    .apply:hover { filter: brightness(1.08); }
+
+    .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 28px; }
+    .preset {
+      border: 1px solid var(--line); border-radius: 999px;
+      background: transparent; color: #bcbcb6; padding: 8px 12px; font-size: 12px;
+    }
+    .preset:hover, .preset.active { color: #fff; border-color: rgba(255,90,31,.5); background: var(--orange-soft); }
+
+    .section-title-row { display: flex; justify-content: space-between; align-items: center; margin: 34px 0 13px; gap: 12px; }
+    .section-title-row h2 { margin: 0; font-size: 21px; letter-spacing: -.03em; }
+    .section-title-row span { color: var(--muted); font-size: 12px; }
+
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+    .card {
+      position: relative; overflow: hidden;
+      min-height: 160px;
+      background: linear-gradient(145deg, #151515, #101010);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+    .card::after {
+      content: ""; position: absolute; width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(255,90,31,.08); filter: blur(10px); right: -58px; top: -58px;
+    }
+    .card-label { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .card-value { margin-top: 18px; font-size: clamp(28px, 3vw, 42px); font-weight: 920; letter-spacing: -.055em; white-space: nowrap; }
+    .card-foot { margin-top: 11px; min-height: 18px; color: var(--muted); font-size: 12px; }
+    .delta { font-weight: 780; }
+    .delta.up { color: var(--green); }
+    .delta.down { color: var(--red); }
+    .delta.flat { color: var(--muted); }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .panel {
+      background: linear-gradient(160deg, #141414, #0f0f0f);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+    .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+    .panel-head h3 { margin: 0; font-size: 18px; letter-spacing: -.025em; }
+    .panel-head p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    .badge { color: var(--orange); background: var(--orange-soft); border: 1px solid rgba(255,90,31,.22); border-radius: 999px; padding: 6px 9px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+
+    .bars { display: grid; gap: 15px; }
+    .bar-row { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(120px, 1fr) auto; gap: 12px; align-items: center; }
+    .bar-name { min-width: 0; }
+    .bar-name strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
+    .bar-name span { color: var(--muted); font-size: 10px; }
+    .track { height: 7px; background: #242424; border-radius: 999px; overflow: hidden; }
+    .fill { height: 100%; min-width: 2px; border-radius: inherit; background: linear-gradient(90deg, var(--orange), #ff8a55); }
+    .bar-value { font-size: 12px; font-weight: 800; text-align: right; white-space: nowrap; }
+
+    .insights { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+    .insight { padding: 16px; border: 1px solid var(--line); background: #0e0e0e; border-radius: 16px; }
+    .insight small { color: var(--orange); font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+    .insight strong { display: block; margin-top: 9px; font-size: 15px; line-height: 1.3; }
+    .insight span { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+    .table-panel { overflow: hidden; }
+    .table-toolbar { display: flex; gap: 10px; align-items: center; }
+    .search {
+      width: min(330px, 100%); height: 40px; border-radius: 12px;
+      border: 1px solid var(--line); background: #0c0c0c; color: #fff; padding: 0 12px; outline: 0;
+    }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th { color: #777; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); }
+    td { padding: 14px 10px; border-bottom: 1px solid rgba(255,255,255,.055); font-size: 13px; }
+    tbody tr:hover { background: rgba(255,255,255,.025); }
+    td.num, th.num { text-align: right; }
+    .article { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
+    .empty, .error {
+      border: 1px dashed #383838; border-radius: 16px; padding: 24px; text-align: center; color: var(--muted); font-size: 13px;
+    }
+    .error { border-color: rgba(255,107,107,.35); color: #ffb0b0; background: rgba(255,107,107,.055); }
+
+    .loading {
+      position: fixed; inset: 0; z-index: 100; display: none; place-items: center;
+      background: rgba(5,5,5,.62); backdrop-filter: blur(7px);
+    }
+    .loading.show { display: grid; }
+    .loader-box { background: #111; border: 1px solid var(--line); border-radius: 18px; padding: 22px 28px; text-align: center; box-shadow: var(--shadow); }
+    .spinner { width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 12px; border: 3px solid #2a2a2a; border-top-color: var(--orange); animation: spin .85s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer-note { margin-top: 22px; color: #696965; font-size: 11px; line-height: 1.55; }
+
+    @media (max-width: 1050px) {
+      .cards { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .grid-2 { grid-template-columns: 1fr; }
+      .filters { grid-template-columns: 1fr 1fr; }
+      .filters .field:first-child { grid-column: 1 / -1; }
+      .apply { width: 100%; }
+    }
+    @media (max-width: 680px) {
+      .shell { padding: 0 15px 38px; }
+      .topbar { height: 68px; }
+      .brand-copy { display: none; }
+      .hero { grid-template-columns: 1fr; padding-top: 30px; }
+      .updated { text-align: left; }
+      .filters { grid-template-columns: 1fr; }
+      .filters .field:first-child { grid-column: auto; }
+      .cards { grid-template-columns: 1fr; }
+      .insights { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: minmax(0, 1.2fr) minmax(90px,1fr) auto; gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading"><div class="loader-box"><div class="spinner"></div><strong>Загружаем данные iiko</strong><div style="color:#777;font-size:11px;margin-top:6px">На бесплатном Render первый запрос иногда занимает дольше обычного</div></div></div>
+
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">DONER<br>CLUB</div>
+        <div class="brand-copy"><strong>DONER CLUB ANALYTICS</strong><span>Управленческий дашборд</span></div>
+      </div>
+      <div class="live-pill"><span class="live-dot"></span> Данные из iiko</div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Пульс продаж</div>
+        <h1 id="heroTitle">Арай</h1>
+        <p class="subtitle" id="heroSubtitle">Загружаем актуальные данные…</p>
+      </div>
+      <div class="updated" id="updatedAt">—</div>
+    </section>
+
+    <section class="filters">
+      <div class="field">
+        <label>Точка</label>
+        <select id="pointSelect"></select>
+      </div>
+      <div class="field">
+        <label>Дата с</label>
+        <input type="date" id="dateFrom">
+      </div>
+      <div class="field">
+        <label>Дата по</label>
+        <input type="date" id="dateTo">
+      </div>
+      <button class="apply" id="applyBtn">Показать</button>
+    </section>
+
+    <div class="presets">
+      <button class="preset" data-days="0">Сегодня</button>
+      <button class="preset" data-days="1">Вчера</button>
+      <button class="preset" data-days="7">7 дней</button>
+      <button class="preset" data-days="30">30 дней</button>
+    </div>
+
+    <div id="errorBox" style="display:none"></div>
+
+    <div class="section-title-row"><h2>Главное</h2><span>Сравнение с предыдущим аналогичным периодом</span></div>
+    <section class="cards">
+      <article class="card"><div class="card-label">Выручка</div><div class="card-value" id="revenue">—</div><div class="card-foot" id="revenueDelta">—</div></article>
+      <article class="card"><div class="card-label">Продано единиц</div><div class="card-value" id="quantity">—</div><div class="card-foot" id="quantityDelta">—</div></article>
+      <article class="card"><div class="card-label">Уникальных позиций</div><div class="card-value" id="uniqueProducts">—</div><div class="card-foot">Номенклатура с продажами</div></article>
+      <article class="card"><div class="card-label">Документов продаж</div><div class="card-value" id="documentsCount">—</div><div class="card-foot">Проведённые документы iiko</div></article>
+    </section>
+
+    <div class="section-title-row"><h2>Что продаётся лучше всего</h2><span id="rangeLabel"></span></div>
+    <section class="grid-2">
+      <article class="panel">
+        <div class="panel-head"><div><h3>Топ по выручке</h3><p>Позиции, которые принесли больше денег</p></div><span class="badge">₸</span></div>
+        <div class="bars" id="revenueBars"></div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h3>Топ по количеству</h3><p>Самые продаваемые позиции</p></div><span class="badge">шт.</span></div>
+        <div class="bars" id="quantityBars"></div>
+      </article>
+    </section>
+
+    <div class="section-title-row"><h2>Пульс периода</h2><span>Автоматические наблюдения</span></div>
+    <section class="panel">
+      <div class="insights" id="insights"></div>
+    </section>
+
+    <div class="section-title-row"><h2>Все позиции</h2><span id="tableCount"></span></div>
+    <section class="panel table-panel">
+      <div class="panel-head">
+        <div><h3>Продажи по номенклатуре</h3><p>Количество и выручка по каждой позиции</p></div>
+        <div class="table-toolbar"><input class="search" id="productSearch" placeholder="Поиск по названию или артикулу"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Позиция</th><th>Артикул</th><th class="num">Количество</th><th class="num">Выручка</th></tr></thead>
+          <tbody id="productTable"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="tableEmpty" style="display:none">По вашему запросу ничего не найдено</div>
+    </section>
+
+    <div class="footer-note">Источник: iikoCloud / документы реализации. Выручка и продажи товаров считаются по проведённым документам. Средний чек и почасовая аналитика появятся после подключения чекового слоя.</div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { data: null, previous: null, departments: [] };
+    const money = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+    const number = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
+
+    function iso(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${day}`;
+    }
+    function parseIso(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); }
+    function formatDate(s) { return new Intl.DateTimeFormat('ru-RU',{day:'2-digit',month:'short',year:'numeric'}).format(parseIso(s)); }
+    function formatRange(a,b) { return a === b ? formatDate(a) : `${formatDate(a)} — ${formatDate(b)}`; }
+    function diffDays(a,b) { return Math.round((parseIso(b)-parseIso(a))/86400000)+1; }
+    function previousPeriod(a,b) {
+      const days = diffDays(a,b);
+      const end = parseIso(a); end.setDate(end.getDate()-1);
+      const start = new Date(end); start.setDate(start.getDate()-days+1);
+      return [iso(start), iso(end)];
+    }
+    function fmtMoney(v) { return `${money.format(Number(v||0))} ₸`; }
+    function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+
+    async function json(url) {
+      const response = await fetch(url, { headers: { 'Accept':'application/json' } });
+      let payload;
+      try { payload = await response.json(); } catch { payload = { success:false, message:`HTTP ${response.status}` }; }
+      if (!response.ok || payload.success === false) throw new Error(payload.message || payload.details || `HTTP ${response.status}`);
+      return payload;
+    }
+
+    async function loadDepartments() {
+      const payload = await json('/departments');
+      state.departments = payload.departments || [];
+      const select = $('pointSelect');
+      select.innerHTML = '';
+      const seen = new Set();
+      for (const d of state.departments) {
+        const value = d.code || d.name;
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = d.name || d.code;
+        if ((d.code || '').toLowerCase() === 'arai') option.selected = true;
+        select.appendChild(option);
+      }
+    }
+
+    function setPreset(kind) {
+      const now = new Date();
+      let from = new Date(now), to = new Date(now);
+      if (kind === 1) { from.setDate(from.getDate()-1); to = new Date(from); }
+      if (kind === 7) { from.setDate(from.getDate()-6); }
+      if (kind === 30) { from.setDate(from.getDate()-29); }
+      $('dateFrom').value = iso(from); $('dateTo').value = iso(to);
+      document.querySelectorAll('.preset').forEach(b => b.classList.toggle('active', Number(b.dataset.days) === kind));
+      loadAnalytics();
+    }
+
+    function deltaMarkup(current, previous, formatter = number) {
+      current = Number(current||0); previous = Number(previous||0);
+      if (!previous) return '<span class="delta flat">Нет базы для сравнения</span>';
+      const pct = ((current-previous)/previous)*100;
+      const cls = pct > .05 ? 'up' : pct < -.05 ? 'down' : 'flat';
+      const arrow = pct > .05 ? '↑' : pct < -.05 ? '↓' : '→';
+      return `<span class="delta ${cls}">${arrow} ${formatter.format(Math.abs(pct))}%</span> <span>к прошлому периоду</span>`;
+    }
+
+    function renderBars(containerId, items, key, type) {
+      const root = $(containerId);
+      const list = (items || []).slice(0,10);
+      if (!list.length) { root.innerHTML = '<div class="empty">Нет данных за выбранный период</div>'; return; }
+      const max = Math.max(...list.map(x => Number(x[key]||0)), 1);
+      root.innerHTML = list.map((item, i) => {
+        const value = Number(item[key]||0);
+        const width = Math.max(2, value/max*100);
+        const shown = type === 'money' ? fmtMoney(value) : number.format(value);
+        return `<div class="bar-row"><div class="bar-name"><strong title="${escapeHtml(item.name)}">${i+1}. ${escapeHtml(item.name)}</strong><span>${escapeHtml(item.article || 'без артикула')}</span></div><div class="track"><div class="fill" style="width:${width}%"></div></div><div class="bar-value">${shown}</div></div>`;
+      }).join('');
+    }
+
+    function renderInsights(data, previous) {
+      const revTop = data.topByRevenue?.[0];
+      const qtyTop = data.topByQuantity?.[0];
+      const s = data.summary || {};
+      const p = previous?.summary || {};
+      let direction = 'Нет данных прошлого периода';
+      if (Number(p.revenue||0) > 0) {
+        const pct = ((Number(s.revenue||0)-Number(p.revenue||0))/Number(p.revenue))*100;
+        direction = pct >= 0 ? `Выручка выше на ${number.format(Math.abs(pct))}%` : `Выручка ниже на ${number.format(Math.abs(pct))}%`;
+      }
+      $('insights').innerHTML = `
+        <div class="insight"><small>Лидер по выручке</small><strong>${escapeHtml(revTop?.name || '—')}</strong><span>${revTop ? fmtMoney(revTop.revenue) : 'Нет продаж'}</span></div>
+        <div class="insight"><small>Лидер по количеству</small><strong>${escapeHtml(qtyTop?.name || '—')}</strong><span>${qtyTop ? `${number.format(qtyTop.quantity)} ед.` : 'Нет продаж'}</span></div>
+        <div class="insight"><small>Динамика</small><strong>${escapeHtml(direction)}</strong><span>Сравнение с предыдущим периодом той же длины</span></div>`;
+    }
+
+    function renderTable() {
+      const rows = state.data?.products || [];
+      const q = $('productSearch').value.trim().toLowerCase();
+      const filtered = rows.filter(x => !q || (x.name||'').toLowerCase().includes(q) || (x.article||'').toLowerCase().includes(q));
+      $('tableCount').textContent = `${filtered.length} из ${rows.length}`;
+      $('productTable').innerHTML = filtered.map(x => `<tr><td><strong>${escapeHtml(x.name)}</strong></td><td class="article">${escapeHtml(x.article || '—')}</td><td class="num">${number.format(Number(x.quantity||0))}</td><td class="num"><strong>${fmtMoney(x.revenue)}</strong></td></tr>`).join('');
+      $('tableEmpty').style.display = filtered.length ? 'none' : 'block';
+    }
+
+    function render(data, previous) {
+      state.data = data; state.previous = previous;
+      const s = data.summary || {}; const p = previous?.summary || {};
+      $('heroTitle').textContent = data.point?.name || data.point?.code || 'Doner Club';
+      $('heroSubtitle').textContent = formatRange(data.period.from, data.period.to);
+      $('rangeLabel').textContent = formatRange(data.period.from, data.period.to);
+      $('updatedAt').textContent = `Обновлено ${new Intl.DateTimeFormat('ru-RU',{hour:'2-digit',minute:'2-digit'}).format(new Date())}`;
+      $('revenue').textContent = fmtMoney(s.revenue);
+      $('quantity').textContent = number.format(Number(s.itemsQuantity||0));
+      $('uniqueProducts').textContent = money.format(Number(s.uniqueProducts||0));
+      $('documentsCount').textContent = money.format(Number(s.documentsCount||0));
+      $('revenueDelta').innerHTML = deltaMarkup(s.revenue, p.revenue, number);
+      $('quantityDelta').innerHTML = deltaMarkup(s.itemsQuantity, p.itemsQuantity, number);
+      renderBars('revenueBars', data.topByRevenue, 'revenue', 'money');
+      renderBars('quantityBars', data.topByQuantity, 'quantity', 'number');
+      renderInsights(data, previous);
+      renderTable();
+    }
+
+    async function loadAnalytics() {
+      const point = $('pointSelect').value || 'Arai';
+      const from = $('dateFrom').value; const to = $('dateTo').value;
+      if (!from || !to) return;
+      if (from > to) { showError('Дата «с» не может быть позже даты «по».'); return; }
+      $('loading').classList.add('show'); $('errorBox').style.display = 'none';
+      try {
+        const [prevFrom, prevTo] = previousPeriod(from,to);
+        const currentUrl = `/analytics?point=${encodeURIComponent(point)}&from=${from}&to=${to}`;
+        const previousUrl = `/analytics?point=${encodeURIComponent(point)}&from=${prevFrom}&to=${prevTo}`;
+        const current = await json(currentUrl);
+        let previous = null;
+        try { previous = await json(previousUrl); } catch (_) {}
+        render(current, previous);
+      } catch (e) { showError(e.message || 'Не удалось загрузить данные'); }
+      finally { $('loading').classList.remove('show'); }
+    }
+
+    function showError(message) {
+      const box = $('errorBox');
+      box.className = 'error'; box.textContent = `Не удалось получить данные: ${message}`; box.style.display = 'block';
+    }
+
+    $('applyBtn').addEventListener('click', loadAnalytics);
+    $('productSearch').addEventListener('input', renderTable);
+    document.querySelectorAll('.preset').forEach(btn => btn.addEventListener('click', () => setPreset(Number(btn.dataset.days))));
+
+    (async function init() {
+      $('loading').classList.add('show');
+      try {
+        await loadDepartments();
+        const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+        $('dateFrom').value = iso(yesterday); $('dateTo').value = iso(yesterday);
+        document.querySelector('.preset[data-days="1"]').classList.add('active');
+        await loadAnalytics();
+      } catch (e) { showError(e.message || 'Ошибка запуска дашборда'); }
+      finally { $('loading').classList.remove('show'); }
+    })();
+  </script>
+</body>
+</html>
