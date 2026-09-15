@@ -260,22 +260,54 @@ def sales_test():
 def departments_test():
     try:
         response = requests.post(
-            f"{IIKO_BASE_URL}/api/inventory/v1/departments",
+            f"{IIKO_BASE_URL}/api/inventory/v1/organizations/tree",
             headers=iiko_headers(),
             json={},
             timeout=30,
         )
 
-        try:
-            data = response.json()
-        except Exception:
-            data = response.text
+        response.raise_for_status()
+        tree = response.json()
+
+        def collect_nodes(value, path="root"):
+            nodes = []
+
+            if isinstance(value, dict):
+                if value.get("id"):
+                    nodes.append({
+                        "path": path,
+                        "id": value.get("id"),
+                        "name": value.get("name"),
+                        "type": value.get("type"),
+                        "keys": list(value.keys())
+                    })
+
+                for key, child in value.items():
+                    if isinstance(child, (dict, list)):
+                        nodes.extend(
+                            collect_nodes(child, f"{path}.{key}")
+                        )
+
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    nodes.extend(
+                        collect_nodes(child, f"{path}[{index}]")
+                    )
+
+            return nodes
 
         return jsonify({
-            "success": response.ok,
-            "statusCode": response.status_code,
-            "data": data
-        }), response.status_code
+            "success": True,
+            "nodes": collect_nodes(tree),
+            "tree": tree
+        })
+
+    except requests.HTTPError as error:
+        return jsonify({
+            "success": False,
+            "statusCode": error.response.status_code,
+            "details": error.response.text
+        }), 500
 
     except Exception as error:
         return jsonify({
