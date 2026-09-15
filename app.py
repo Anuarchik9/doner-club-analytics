@@ -314,7 +314,103 @@ def departments_test():
             "success": False,
             "message": str(error)
         }), 500
+@app.route("/sales-detail-test")
+def sales_detail_test():
+    try:
+        # Находим организацию Arai
+        org_response = requests.post(
+            f"{IIKO_BASE_URL}/api/1/organizations",
+            headers=iiko_headers(),
+            json={
+                "returnAdditionalInfo": True,
+                "includeDisabled": False
+            },
+            timeout=20,
+        )
+        org_response.raise_for_status()
 
+        organizations = org_response.json().get("organizations", [])
+
+        arai = next(
+            (
+                org for org in organizations
+                if (org.get("code") or "").lower() == "arai"
+            ),
+            None
+        )
+
+        if not arai:
+            return jsonify({
+                "success": False,
+                "message": "Arai organization not found"
+            }), 404
+
+        organization_id = arai["id"]
+
+        # Получаем документы продаж Арай
+        list_response = requests.post(
+            f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/list",
+            headers=iiko_headers(),
+            json={
+                "organizationId": organization_id,
+                "from": "2026-09-15",
+                "to": "2026-09-15"
+            },
+            timeout=30,
+        )
+
+        list_response.raise_for_status()
+        documents = list_response.json()
+
+        details = []
+
+        # Получаем содержимое каждого документа
+        for document in documents:
+            document_id = document.get("documentId")
+
+            if not document_id:
+                continue
+
+            detail_response = requests.post(
+                f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/get",
+                headers=iiko_headers(),
+                json={
+                    "organizationId": organization_id,
+                    "documentId": document_id
+                },
+                timeout=30,
+            )
+
+            if detail_response.ok:
+                details.append(detail_response.json())
+            else:
+                details.append({
+                    "documentId": document_id,
+                    "error": detail_response.text,
+                    "statusCode": detail_response.status_code
+                })
+
+        return jsonify({
+            "success": True,
+            "organization": "Arai",
+            "date": "2026-09-15",
+            "documentsCount": len(documents),
+            "documents": documents,
+            "details": details
+        })
+
+    except requests.HTTPError as error:
+        return jsonify({
+            "success": False,
+            "statusCode": error.response.status_code,
+            "details": error.response.text
+        }), 500
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
