@@ -198,6 +198,32 @@ def orders():
             "success": False,
             "message": str(error)
         }), 500
+@app.route("/sales-test")
+def sales_test():
+    try:
+        response = requests.post(
+            f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/list",
+            headers=iiko_headers(),
+            json={
+                "dateFrom": "2026-09-15T00:00:00",
+                "dateTo": "2026-09-15T23:59:59"
+            },
+            timeout=30,
+        )
+
+        return jsonify({
+            "success": response.ok,
+            "status_code": response.status_code,
+            "data": response.json() if response.text else None
+        }), response.status_code
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
