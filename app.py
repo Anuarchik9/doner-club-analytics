@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 IIKO_BASE_URL = "https://api-ru.iiko.services"
+LOCAL_TZ = ZoneInfo("Asia/Almaty")
 
 
 def get_iiko_token():
@@ -28,7 +29,6 @@ def get_iiko_token():
         },
         timeout=20,
     )
-
     response.raise_for_status()
     return response.json()["token"]
 
@@ -47,29 +47,22 @@ def get_departments():
         json={},
         timeout=30,
     )
-
     response.raise_for_status()
     tree = response.json()
-
     departments = []
 
     def walk(value):
         if isinstance(value, dict):
-            if (
-                value.get("type") == "DEPARTMENT"
-                and value.get("organizationId")
-            ):
+            if value.get("type") == "DEPARTMENT" and value.get("organizationId"):
                 departments.append({
                     "organizationId": value.get("organizationId"),
                     "name": value.get("name"),
                     "code": value.get("code"),
                     "parentId": value.get("parentId"),
                 })
-
             for child in value.values():
                 if isinstance(child, (dict, list)):
                     walk(child)
-
         elif isinstance(value, list):
             for child in value:
                 walk(child)
@@ -108,7 +101,6 @@ def get_sales_documents(organization_id, date_from, date_to):
         },
         timeout=30,
     )
-
     response.raise_for_status()
     return response.json()
 
@@ -123,7 +115,6 @@ def get_sales_document(organization_id, document_id):
         },
         timeout=30,
     )
-
     response.raise_for_status()
     return response.json()
 
@@ -137,13 +128,9 @@ def get_products_map():
         response = requests.post(
             f"{IIKO_BASE_URL}/api/nomenclature/v1/product/list",
             headers=iiko_headers(),
-            json={
-                "limit": limit,
-                "offset": offset,
-            },
+            json={"limit": limit, "offset": offset},
             timeout=30,
         )
-
         response.raise_for_status()
         data = response.json()
         items = data.get("items", [])
@@ -190,6 +177,51 @@ def date_range(date_from, date_to):
     return result
 
 
+def get_delivery_orders(organization_id, date_from, date_to):
+    response = requests.post(
+        f"{IIKO_BASE_URL}/api/1/deliveries/by_delivery_date_and_status",
+        headers=iiko_headers(),
+        json={
+            "organizationIds": [organization_id],
+            "deliveryDateFrom": f"{date_from} 00:00:00.000",
+            "deliveryDateTo": f"{date_to} 23:59:59.999",
+        },
+        timeout=30,
+    )
+    return response
+
+
+def flatten_orders_response(data):
+    orders = []
+    for block in data.get("ordersByOrganizations", []) or []:
+        organization_id = block.get("organizationId")
+        for order in block.get("orders", []) or []:
+            if isinstance(order, dict):
+                item = dict(order)
+                item["_organizationId"] = organization_id
+                orders.append(item)
+    return orders
+
+
+def safe_order_sample(order):
+    guests = order.get("guestsInfo") or {}
+    payments = order.get("payments") or []
+    return {
+        "id": order.get("id"),
+        "posOrderId": order.get("posOrderId"),
+        "number": order.get("number"),
+        "status": order.get("status"),
+        "sum": order.get("sum"),
+        "sourceKey": order.get("sourceKey"),
+        "whenBillPrinted": order.get("whenBillPrinted"),
+        "whenClosed": order.get("whenClosed"),
+        "terminalGroupId": order.get("terminalGroupId"),
+        "orderServiceType": order.get("orderServiceType"),
+        "guestsCount": guests.get("count"),
+        "paymentsCount": len(payments),
+    }
+
+
 @app.route("/")
 def home():
     return jsonify({
@@ -200,6 +232,7 @@ def home():
             "arai_day": "/analytics?point=Arai&date=2026-09-15",
             "arai_period": "/analytics?point=Arai&from=2026-09-01&to=2026-09-15",
             "departments": "/departments",
+            "orders_access_test": "/orders-access-test?point=Arai",
         },
     })
 
@@ -211,17 +244,105 @@ def departments():
             "success": True,
             "departments": get_departments(),
         })
-
     except requests.HTTPError as error:
         return jsonify({
             "success": False,
             "statusCode": error.response.status_code,
             "details": error.response.text,
         }), 500
-
     except Exception as error:
         return jsonify({
             "success": False,
+            "message": str(error),
+        }), 500
+
+
+@app.route("/orders-access-test")
+def orders_access_test():
+    try:
+        point = request.args.get("point", "Arai").strip()
+        default_date = (datetime.now(LOCAL_TZ).date() - timedelta(days=1)).isoformat()
+        date_from = request.args.get("from") or request.args.get("date") or default_date
+        date_to = request.args.get("to") or date_from
+
+        department, available_departments = find_department(point)
+        if not department:
+            return jsonify({
+                "success": False,
+                "message": f"Point '{point}' not found",
+                "availablePoints": [
+                    {"code": d.get("code"), "name": d.get("name")}
+                    for d in available_departments
+                ],
+            }), 404
+
+        organization_id = department["organizationId"]
+        response = get_delivery_orders(organization_id, date_from, date_to)
+
+        try:
+            data = response.json()
+        except Exception:
+            data = {"raw": response.text[:4000]}
+
+        if not response.ok:
+            return jsonify({
+                "success": False,
+                "access": False,
+                "endpoint": "/api/1/deliveries/by_delivery_date_and_status",
+                "requiredRestrictionGroup": "Orders: receiving",
+                "statusCode": response.status_code,
+                "point": {
+                    "code": department.get("code"),
+                    "name": department.get("name"),
+                    "organizationId": organization_id,
+                },
+                "period": {"from": date_from, "to": date_to},
+                "details": data,
+            }), response.status_code
+
+        orders = flatten_orders_response(data)
+        sums = [float(o.get("sum") or 0) for o in orders]
+        closed = [o for o in orders if o.get("whenClosed")]
+
+        return jsonify({
+            "success": True,
+            "access": True,
+            "endpoint": "/api/1/deliveries/by_delivery_date_and_status",
+            "requiredRestrictionGroup": "Orders: receiving",
+            "point": {
+                "code": department.get("code"),
+                "name": department.get("name"),
+                "organizationId": organization_id,
+            },
+            "period": {"from": date_from, "to": date_to},
+            "orderCount": len(orders),
+            "closedOrderCount": len(closed),
+            "sumOfReturnedOrders": round(sum(sums), 2),
+            "sample": [safe_order_sample(o) for o in orders[:5]],
+            "responseShape": {
+                "topLevelKeys": sorted(data.keys()) if isinstance(data, dict) else [],
+                "organizationBlocks": len(data.get("ordersByOrganizations", []) or [])
+                    if isinstance(data, dict) else 0,
+            },
+            "diagnosis": (
+                "Access granted and order-level records were returned."
+                if orders
+                else
+                "Access granted, but this delivery-order endpoint returned no orders for the selected period. This does not prove that all POS receipts are available through iikoCloud."
+            ),
+        })
+
+    except requests.HTTPError as error:
+        return jsonify({
+            "success": False,
+            "access": False,
+            "statusCode": error.response.status_code,
+            "details": error.response.text,
+        }), 500
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "access": False,
             "message": str(error),
         }), 500
 
@@ -239,10 +360,7 @@ def analytics():
             date_to = single_date
 
         if not date_from:
-            date_from = datetime.now(
-                ZoneInfo("Asia/Almaty")
-            ).date().isoformat()
-
+            date_from = datetime.now(LOCAL_TZ).date().isoformat()
         if not date_to:
             date_to = date_from
 
@@ -254,37 +372,25 @@ def analytics():
                 "success": False,
                 "message": f"Point '{point}' not found",
                 "availablePoints": [
-                    {
-                        "code": d.get("code"),
-                        "name": d.get("name"),
-                    }
+                    {"code": d.get("code"), "name": d.get("name")}
                     for d in available_departments
                 ],
             }), 404
 
         organization_id = department["organizationId"]
-        documents = get_sales_documents(
-            organization_id,
-            date_from,
-            date_to,
-        )
+        documents = get_sales_documents(organization_id, date_from, date_to)
 
         processed_documents = [
             document
             for document in documents
-            if (
-                not document.get("status")
-                or document.get("status") == "PROCESSED"
-            )
+            if not document.get("status") or document.get("status") == "PROCESSED"
         ]
 
-        totals = defaultdict(
-            lambda: {
-                "quantity": 0.0,
-                "revenue": 0.0,
-                "article": None,
-            }
-        )
+        totals = defaultdict(lambda: {
+            "quantity": 0.0,
+            "revenue": 0.0,
+            "article": None,
+        })
 
         daily = {
             day: {
@@ -318,11 +424,7 @@ def analytics():
                 continue
 
             try:
-                detail = get_sales_document(
-                    organization_id,
-                    document_id,
-                )
-
+                detail = get_sales_document(organization_id, document_id)
             except requests.HTTPError as error:
                 document_errors.append({
                     "documentId": document_id,
@@ -355,50 +457,25 @@ def analytics():
             nomenclature_warning = str(error)
 
         products = []
-
         for product_id, values in totals.items():
             product_info = product_map.get(product_id, {})
-
             products.append({
                 "productId": product_id,
                 "name": product_info.get("name") or product_id,
-                "article": (
-                    product_info.get("article")
-                    or values.get("article")
-                ),
+                "article": product_info.get("article") or values.get("article"),
                 "quantity": round(values["quantity"], 3),
                 "revenue": round(values["revenue"], 2),
             })
 
-        by_revenue = sorted(
-            products,
-            key=lambda item: item["revenue"],
-            reverse=True,
-        )
-
-        by_quantity = sorted(
-            products,
-            key=lambda item: item["quantity"],
-            reverse=True,
-        )
+        by_revenue = sorted(products, key=lambda item: item["revenue"], reverse=True)
+        by_quantity = sorted(products, key=lambda item: item["quantity"], reverse=True)
 
         revenue_from_documents = round(
-            sum(
-                float(document.get("sum") or 0)
-                for document in processed_documents
-            ),
+            sum(float(document.get("sum") or 0) for document in processed_documents),
             2,
         )
-
-        revenue_from_items = round(
-            sum(product["revenue"] for product in products),
-            2,
-        )
-
-        total_quantity = round(
-            sum(product["quantity"] for product in products),
-            3,
-        )
+        revenue_from_items = round(sum(product["revenue"] for product in products), 2)
+        total_quantity = round(sum(product["quantity"] for product in products), 3)
 
         daily_series = []
         for day in sorted(daily.keys()):
@@ -432,8 +509,7 @@ def analytics():
                 "itemsQuantity": total_quantity,
                 "uniqueProducts": len(products),
                 "averageDailyRevenue": round(
-                    revenue_from_documents / days_count,
-                    2,
+                    revenue_from_documents / days_count, 2
                 ) if days_count else 0,
             },
             "daily": daily_series,
@@ -444,8 +520,7 @@ def analytics():
                 "nomenclature": nomenclature_warning,
                 "documentDetails": document_errors,
                 "note": (
-                    "Revenue is based on iiko inventory sales documents. "
-                    "Average check and hourly sales require receipt/order-level data."
+                    "Revenue is based on iiko inventory sales documents. Average check and hourly sales require receipt/order-level data."
                 ),
             },
         })
@@ -456,7 +531,6 @@ def analytics():
             "statusCode": error.response.status_code,
             "details": error.response.text,
         }), 500
-
     except Exception as error:
         return jsonify({
             "success": False,
