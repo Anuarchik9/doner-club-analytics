@@ -49,7 +49,6 @@ def get_iiko_token(force_refresh=False):
         app_id = os.environ.get("IIKO_APP_ID")
         client_secret = os.environ.get("IIKO_CLIENT_SECRET")
         api_key = os.environ.get("IIKO_API_KEY")
-
         if not all([app_id, client_secret, api_key]):
             raise RuntimeError("iikoCloud credentials are not configured")
 
@@ -64,7 +63,6 @@ def get_iiko_token(force_refresh=False):
         )
         response.raise_for_status()
         token = response.json()["token"]
-
         _token_cache["value"] = token
         _token_cache["expires_at"] = time.time() + TOKEN_TTL_SECONDS
         return token
@@ -84,11 +82,9 @@ def iiko_post(path, payload, timeout=30, retry_auth=True):
         json=payload,
         timeout=timeout,
     )
-
     if response.status_code == 401 and retry_auth:
         get_iiko_token(force_refresh=True)
         return iiko_post(path, payload, timeout=timeout, retry_auth=False)
-
     return response
 
 
@@ -100,11 +96,7 @@ def get_departments(force_refresh=False):
         if not force_refresh and _cache_valid(_departments_cache):
             return _departments_cache["value"]
 
-        response = iiko_post(
-            "/api/inventory/v1/organizations/tree",
-            {},
-            timeout=30,
-        )
+        response = iiko_post("/api/inventory/v1/organizations/tree", {}, timeout=30)
         response.raise_for_status()
         tree = response.json()
         departments = []
@@ -153,11 +145,7 @@ def find_department(point):
 def get_sales_documents(organization_id, date_from, date_to):
     response = iiko_post(
         "/api/inventory/v1/sales_document/list",
-        {
-            "organizationId": organization_id,
-            "from": date_from,
-            "to": date_to,
-        },
+        {"organizationId": organization_id, "from": date_from, "to": date_to},
         timeout=35,
     )
     response.raise_for_status()
@@ -167,10 +155,7 @@ def get_sales_documents(organization_id, date_from, date_to):
 def get_sales_document(organization_id, document_id):
     response = iiko_post(
         "/api/inventory/v1/sales_document/get",
-        {
-            "organizationId": organization_id,
-            "documentId": document_id,
-        },
+        {"organizationId": organization_id, "documentId": document_id},
         timeout=35,
     )
     response.raise_for_status()
@@ -191,7 +176,6 @@ def get_products_map(force_refresh=False):
                 products = {}
                 offset = 0
                 limit = 1000
-
                 while True:
                     response = iiko_post(
                         "/api/nomenclature/v1/product/list",
@@ -203,7 +187,6 @@ def get_products_map(force_refresh=False):
                     response.raise_for_status()
                     data = response.json()
                     items = data.get("items", [])
-
                     for product in items:
                         product_id = product.get("productId")
                         if product_id:
@@ -211,7 +194,6 @@ def get_products_map(force_refresh=False):
                                 "name": product.get("name") or "Позиция без названия",
                                 "article": product.get("productArticle"),
                             }
-
                     total_count = data.get("totalCount")
                     offset += len(items)
                     if not items:
@@ -247,11 +229,9 @@ def date_range(date_from, date_to):
     end = datetime.strptime(date_to, "%Y-%m-%d").date()
     if end < start:
         raise ValueError("date_to must not be earlier than date_from")
-
     days_count = (end - start).days + 1
     if days_count > MAX_ANALYTICS_DAYS:
         raise ValueError(f"Maximum period is {MAX_ANALYTICS_DAYS} days")
-
     return [(start + timedelta(days=offset)).isoformat() for offset in range(days_count)]
 
 
@@ -301,11 +281,7 @@ def safe_order_sample(order):
 def fetch_document_details_parallel(organization_id, processed_documents):
     document_errors = []
     details = {}
-    jobs = [
-        document.get("documentId")
-        for document in processed_documents
-        if document.get("documentId")
-    ]
+    jobs = [d.get("documentId") for d in processed_documents if d.get("documentId")]
     if not jobs:
         return details, document_errors
 
@@ -353,7 +329,10 @@ def _analytics_cache_set(key, value):
             "expires_at": time.time() + ANALYTICS_TTL_SECONDS,
         }
         if len(_analytics_cache) > 40:
-            oldest_keys = sorted(_analytics_cache, key=lambda k: _analytics_cache[k]["expires_at"])[:10]
+            oldest_keys = sorted(
+                _analytics_cache,
+                key=lambda k: _analytics_cache[k]["expires_at"],
+            )[:10]
             for old_key in oldest_keys:
                 _analytics_cache.pop(old_key, None)
 
@@ -361,7 +340,6 @@ def _analytics_cache_set(key, value):
 def build_analytics(point, date_from, date_to):
     all_dates = date_range(date_from, date_to)
     department, available_departments = find_department(point)
-
     if not department:
         return None, {
             "success": False,
@@ -380,7 +358,6 @@ def build_analytics(point, date_from, date_to):
         payload["cache"] = {"hit": True, "ttlSeconds": ANALYTICS_TTL_SECONDS}
         return payload, None, 200
 
-    # Load nomenclature before the heavier detail fan-out so product names are cached early.
     try:
         product_map = get_products_map()
         nomenclature_warning = None
@@ -394,10 +371,8 @@ def build_analytics(point, date_from, date_to):
         for document in documents
         if not document.get("status") or document.get("status") == "PROCESSED"
     ]
-
     details_by_id, document_errors = fetch_document_details_parallel(
-        organization_id,
-        processed_documents,
+        organization_id, processed_documents
     )
 
     totals = defaultdict(lambda: {"quantity": 0.0, "revenue": 0.0, "article": None})
@@ -423,14 +398,12 @@ def build_analytics(point, date_from, date_to):
                 "quantity": 0.0,
                 "documentsCount": 0,
             }
-
         daily[day]["revenue"] += float(document.get("sum") or 0)
         daily[day]["documentsCount"] += 1
 
         detail = details_by_id.get(document_id)
         if not detail:
             continue
-
         for item in detail.get("items", []):
             product_id = item.get("product")
             if not product_id:
@@ -458,7 +431,9 @@ def build_analytics(point, date_from, date_to):
 
     by_revenue = sorted(products, key=lambda item: item["revenue"], reverse=True)
     by_quantity = sorted(products, key=lambda item: item["quantity"], reverse=True)
-    revenue_from_documents = round(sum(float(document.get("sum") or 0) for document in processed_documents), 2)
+    revenue_from_documents = round(
+        sum(float(document.get("sum") or 0) for document in processed_documents), 2
+    )
     revenue_from_items = round(sum(product["revenue"] for product in products), 2)
     total_quantity = round(sum(product["quantity"] for product in products), 3)
 
@@ -489,7 +464,9 @@ def build_analytics(point, date_from, date_to):
             "itemsRevenue": revenue_from_items,
             "itemsQuantity": total_quantity,
             "uniqueProducts": len(products),
-            "averageDailyRevenue": round(revenue_from_documents / days_count, 2) if days_count else 0,
+            "averageDailyRevenue": (
+                round(revenue_from_documents / days_count, 2) if days_count else 0
+            ),
         },
         "daily": daily_series,
         "topByRevenue": by_revenue[:20],
@@ -498,7 +475,10 @@ def build_analytics(point, date_from, date_to):
         "warnings": {
             "nomenclature": nomenclature_warning,
             "documentDetails": document_errors,
-            "note": "Revenue is based on iiko inventory sales documents. Receipt analytics is available through iikoServer OLAP when configured.",
+            "note": (
+                "Revenue is based on iiko inventory sales documents. "
+                "Receipt analytics is available through iikoServer OLAP when configured."
+            ),
         },
         "performance": {
             "detailWorkers": min(DETAIL_WORKERS, max(requested_details, 1)),
@@ -507,7 +487,6 @@ def build_analytics(point, date_from, date_to):
         },
         "cache": {"hit": False, "ttlSeconds": ANALYTICS_TTL_SECONDS},
     }
-
     _analytics_cache_set(cache_key, payload)
     return payload, None, 200
 
@@ -515,7 +494,10 @@ def build_analytics(point, date_from, date_to):
 # ---------------- iikoServer / OLAP ----------------
 
 def iiko_server_settings():
-    base_url = (os.environ.get("IIKO_SERVER_URL") or "https://dc-firdaws-co-arm.iiko.it/resto").rstrip("/")
+    base_url = (
+        os.environ.get("IIKO_SERVER_URL")
+        or "https://dc-firdaws-co-arm.iiko.it/resto"
+    ).rstrip("/")
     login = os.environ.get("IIKO_SERVER_LOGIN")
     password = os.environ.get("IIKO_SERVER_PASSWORD")
     if not login or not password:
@@ -559,7 +541,10 @@ def iiko_server_departments(base_url, token):
     root = ET.fromstring(response.text)
     result = []
     for node in root.iter():
-        children = {child.tag.split('}')[-1]: (child.text or "").strip() for child in list(node)}
+        children = {
+            child.tag.split("}")[-1]: (child.text or "").strip()
+            for child in list(node)
+        }
         if children.get("type") == "DEPARTMENT" and children.get("id"):
             result.append({
                 "id": children.get("id"),
@@ -571,12 +556,14 @@ def iiko_server_departments(base_url, token):
 
 
 def run_iiko_server_olap(base_url, token, date_from, date_to, department_id=None):
+    # OpenDate.Typed is a DATE field in iikoServer. Passing 23:59:59 causes
+    # HTTP 409 on some iikoServer versions, so use date-only boundaries.
     filters = {
         "OpenDate.Typed": {
             "filterType": "DateRange",
             "periodType": "CUSTOM",
-            "from": f"{date_from}T00:00:00.000",
-            "to": f"{date_to}T23:59:59.999",
+            "from": date_from,
+            "to": date_to,
             "includeLow": True,
             "includeHigh": True,
         },
@@ -604,7 +591,6 @@ def run_iiko_server_olap(base_url, token, date_from, date_to, department_id=None
         ],
         "filters": filters,
     }
-
     response = requests.post(
         f"{base_url}/api/v2/reports/olap",
         params={"key": token},
@@ -753,8 +739,6 @@ def olap_access_test():
         date_from = request.args.get("from") or request.args.get("date") or default_date
         date_to = request.args.get("to") or date_from
         department_id = request.args.get("departmentId") or None
-
-        # Validate period using the same limits as the dashboard.
         date_range(date_from, date_to)
 
         base_url, token = iiko_server_auth()
@@ -784,7 +768,9 @@ def olap_access_test():
                 "checks": round(total_checks, 3),
                 "revenue": round(total_revenue, 2),
                 "guests": round(total_guests, 3),
-                "averageCheck": round(total_revenue / total_checks, 2) if total_checks else 0,
+                "averageCheck": (
+                    round(total_revenue / total_checks, 2) if total_checks else 0
+                ),
             },
             "sample": rows[:10],
         })
