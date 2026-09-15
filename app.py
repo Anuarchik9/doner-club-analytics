@@ -142,7 +142,7 @@ def orders_test():
             "success": False,
             "message": str(error)
         }), 500
-        @app.route("/orders")
+@app.route("/orders")
 def orders():
     try:
         # Получаем активные организации
