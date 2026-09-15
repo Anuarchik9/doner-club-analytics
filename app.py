@@ -1,5 +1,8 @@
 import os
+import threading
+import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -11,26 +14,58 @@ app = Flask(__name__)
 IIKO_BASE_URL = "https://api-ru.iiko.services"
 LOCAL_TZ = ZoneInfo("Asia/Almaty")
 
+TOKEN_TTL_SECONDS = 50 * 60
+PRODUCTS_TTL_SECONDS = 30 * 60
+DEPARTMENTS_TTL_SECONDS = 10 * 60
+ANALYTICS_TTL_SECONDS = 5 * 60
+DETAIL_WORKERS = max(2, min(int(os.environ.get("IIKO_DETAIL_WORKERS", "8")), 12))
+MAX_ANALYTICS_DAYS = 62
 
-def get_iiko_token():
-    app_id = os.environ.get("IIKO_APP_ID")
-    client_secret = os.environ.get("IIKO_CLIENT_SECRET")
-    api_key = os.environ.get("IIKO_API_KEY")
+_token_cache = {"value": None, "expires_at": 0.0}
+_products_cache = {"value": None, "expires_at": 0.0}
+_departments_cache = {"value": None, "expires_at": 0.0}
+_analytics_cache = {}
 
-    if not all([app_id, client_secret, api_key]):
-        raise RuntimeError("iiko credentials are not configured")
+_token_lock = threading.Lock()
+_products_lock = threading.Lock()
+_departments_lock = threading.Lock()
+_analytics_lock = threading.Lock()
 
-    response = requests.post(
-        f"{IIKO_BASE_URL}/api/v2/access_token",
-        json={
-            "appId": app_id,
-            "clientSecret": client_secret,
-            "apiKey": api_key,
-        },
-        timeout=20,
-    )
-    response.raise_for_status()
-    return response.json()["token"]
+
+def _cache_valid(cache):
+    return cache.get("value") is not None and cache.get("expires_at", 0) > time.time()
+
+
+def get_iiko_token(force_refresh=False):
+    if not force_refresh and _cache_valid(_token_cache):
+        return _token_cache["value"]
+
+    with _token_lock:
+        if not force_refresh and _cache_valid(_token_cache):
+            return _token_cache["value"]
+
+        app_id = os.environ.get("IIKO_APP_ID")
+        client_secret = os.environ.get("IIKO_CLIENT_SECRET")
+        api_key = os.environ.get("IIKO_API_KEY")
+
+        if not all([app_id, client_secret, api_key]):
+            raise RuntimeError("iiko credentials are not configured")
+
+        response = requests.post(
+            f"{IIKO_BASE_URL}/api/v2/access_token",
+            json={
+                "appId": app_id,
+                "clientSecret": client_secret,
+                "apiKey": api_key,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        token = response.json()["token"]
+
+        _token_cache["value"] = token
+        _token_cache["expires_at"] = time.time() + TOKEN_TTL_SECONDS
+        return token
 
 
 def iiko_headers():
@@ -40,35 +75,58 @@ def iiko_headers():
     }
 
 
-def get_departments():
+def iiko_post(path, payload, timeout=30, retry_auth=True):
     response = requests.post(
-        f"{IIKO_BASE_URL}/api/inventory/v1/organizations/tree",
+        f"{IIKO_BASE_URL}{path}",
         headers=iiko_headers(),
-        json={},
-        timeout=30,
+        json=payload,
+        timeout=timeout,
     )
-    response.raise_for_status()
-    tree = response.json()
-    departments = []
 
-    def walk(value):
-        if isinstance(value, dict):
-            if value.get("type") == "DEPARTMENT" and value.get("organizationId"):
-                departments.append({
-                    "organizationId": value.get("organizationId"),
-                    "name": value.get("name"),
-                    "code": value.get("code"),
-                    "parentId": value.get("parentId"),
-                })
-            for child in value.values():
-                if isinstance(child, (dict, list)):
+    if response.status_code == 401 and retry_auth:
+        get_iiko_token(force_refresh=True)
+        return iiko_post(path, payload, timeout=timeout, retry_auth=False)
+
+    return response
+
+
+def get_departments(force_refresh=False):
+    if not force_refresh and _cache_valid(_departments_cache):
+        return _departments_cache["value"]
+
+    with _departments_lock:
+        if not force_refresh and _cache_valid(_departments_cache):
+            return _departments_cache["value"]
+
+        response = iiko_post(
+            "/api/inventory/v1/organizations/tree",
+            {},
+            timeout=30,
+        )
+        response.raise_for_status()
+        tree = response.json()
+        departments = []
+
+        def walk(value):
+            if isinstance(value, dict):
+                if value.get("type") == "DEPARTMENT" and value.get("organizationId"):
+                    departments.append({
+                        "organizationId": value.get("organizationId"),
+                        "name": value.get("name"),
+                        "code": value.get("code"),
+                        "parentId": value.get("parentId"),
+                    })
+                for child in value.values():
+                    if isinstance(child, (dict, list)):
+                        walk(child)
+            elif isinstance(value, list):
+                for child in value:
                     walk(child)
-        elif isinstance(value, list):
-            for child in value:
-                walk(child)
 
-    walk(tree)
-    return departments
+        walk(tree)
+        _departments_cache["value"] = departments
+        _departments_cache["expires_at"] = time.time() + DEPARTMENTS_TTL_SECONDS
+        return departments
 
 
 def find_department(point):
@@ -91,69 +149,75 @@ def find_department(point):
 
 
 def get_sales_documents(organization_id, date_from, date_to):
-    response = requests.post(
-        f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/list",
-        headers=iiko_headers(),
-        json={
+    response = iiko_post(
+        "/api/inventory/v1/sales_document/list",
+        {
             "organizationId": organization_id,
             "from": date_from,
             "to": date_to,
         },
-        timeout=30,
+        timeout=35,
     )
     response.raise_for_status()
     return response.json()
 
 
 def get_sales_document(organization_id, document_id):
-    response = requests.post(
-        f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/get",
-        headers=iiko_headers(),
-        json={
+    response = iiko_post(
+        "/api/inventory/v1/sales_document/get",
+        {
             "organizationId": organization_id,
             "documentId": document_id,
         },
-        timeout=30,
+        timeout=35,
     )
     response.raise_for_status()
     return response.json()
 
 
-def get_products_map():
-    products = {}
-    offset = 0
-    limit = 1000
+def get_products_map(force_refresh=False):
+    if not force_refresh and _cache_valid(_products_cache):
+        return _products_cache["value"]
 
-    while True:
-        response = requests.post(
-            f"{IIKO_BASE_URL}/api/nomenclature/v1/product/list",
-            headers=iiko_headers(),
-            json={"limit": limit, "offset": offset},
-            timeout=30,
-        )
-        response.raise_for_status()
-        data = response.json()
-        items = data.get("items", [])
+    with _products_lock:
+        if not force_refresh and _cache_valid(_products_cache):
+            return _products_cache["value"]
 
-        for product in items:
-            product_id = product.get("productId")
-            if product_id:
-                products[product_id] = {
-                    "name": product.get("name") or product_id,
-                    "article": product.get("productArticle"),
-                }
+        products = {}
+        offset = 0
+        limit = 1000
 
-        total_count = data.get("totalCount")
-        offset += len(items)
+        while True:
+            response = iiko_post(
+                "/api/nomenclature/v1/product/list",
+                {"limit": limit, "offset": offset},
+                timeout=35,
+            )
+            response.raise_for_status()
+            data = response.json()
+            items = data.get("items", [])
 
-        if not items:
-            break
-        if total_count is not None and offset >= total_count:
-            break
-        if len(items) < limit:
-            break
+            for product in items:
+                product_id = product.get("productId")
+                if product_id:
+                    products[product_id] = {
+                        "name": product.get("name") or product_id,
+                        "article": product.get("productArticle"),
+                    }
 
-    return products
+            total_count = data.get("totalCount")
+            offset += len(items)
+
+            if not items:
+                break
+            if total_count is not None and offset >= total_count:
+                break
+            if len(items) < limit:
+                break
+
+        _products_cache["value"] = products
+        _products_cache["expires_at"] = time.time() + PRODUCTS_TTL_SECONDS
+        return products
 
 
 def document_date(document, fallback):
@@ -169,26 +233,26 @@ def date_range(date_from, date_to):
     if end < start:
         raise ValueError("date_to must not be earlier than date_from")
 
-    result = []
-    current = start
-    while current <= end:
-        result.append(current.isoformat())
-        current += timedelta(days=1)
-    return result
+    days_count = (end - start).days + 1
+    if days_count > MAX_ANALYTICS_DAYS:
+        raise ValueError(f"Maximum period is {MAX_ANALYTICS_DAYS} days")
+
+    return [
+        (start + timedelta(days=offset)).isoformat()
+        for offset in range(days_count)
+    ]
 
 
 def get_delivery_orders(organization_id, date_from, date_to):
-    response = requests.post(
-        f"{IIKO_BASE_URL}/api/1/deliveries/by_delivery_date_and_status",
-        headers=iiko_headers(),
-        json={
+    return iiko_post(
+        "/api/1/deliveries/by_delivery_date_and_status",
+        {
             "organizationIds": [organization_id],
             "deliveryDateFrom": f"{date_from} 00:00:00.000",
             "deliveryDateTo": f"{date_to} 23:59:59.999",
         },
         timeout=30,
     )
-    return response
 
 
 def flatten_orders_response(data):
@@ -220,6 +284,247 @@ def safe_order_sample(order):
         "guestsCount": guests.get("count"),
         "paymentsCount": len(payments),
     }
+
+
+def fetch_document_details_parallel(organization_id, processed_documents):
+    document_errors = []
+    details = {}
+
+    jobs = [
+        (document.get("documentId"), document)
+        for document in processed_documents
+        if document.get("documentId")
+    ]
+    if not jobs:
+        return details, document_errors
+
+    workers = min(DETAIL_WORKERS, len(jobs))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="iiko-detail") as executor:
+        future_to_id = {
+            executor.submit(get_sales_document, organization_id, document_id): document_id
+            for document_id, _ in jobs
+        }
+
+        for future in as_completed(future_to_id):
+            document_id = future_to_id[future]
+            try:
+                details[document_id] = future.result()
+            except requests.HTTPError as error:
+                response = error.response
+                document_errors.append({
+                    "documentId": document_id,
+                    "statusCode": response.status_code if response is not None else None,
+                    "details": (response.text[:1000] if response is not None else str(error)),
+                })
+            except Exception as error:
+                document_errors.append({
+                    "documentId": document_id,
+                    "statusCode": None,
+                    "details": str(error),
+                })
+
+    return details, document_errors
+
+
+def _analytics_cache_get(key):
+    with _analytics_lock:
+        cached = _analytics_cache.get(key)
+        if not cached:
+            return None
+        if cached["expires_at"] <= time.time():
+            _analytics_cache.pop(key, None)
+            return None
+        return cached["value"]
+
+
+def _analytics_cache_set(key, value):
+    with _analytics_lock:
+        _analytics_cache[key] = {
+            "value": value,
+            "expires_at": time.time() + ANALYTICS_TTL_SECONDS,
+        }
+        if len(_analytics_cache) > 40:
+            oldest_keys = sorted(
+                _analytics_cache,
+                key=lambda k: _analytics_cache[k]["expires_at"],
+            )[:10]
+            for old_key in oldest_keys:
+                _analytics_cache.pop(old_key, None)
+
+
+def build_analytics(point, date_from, date_to):
+    all_dates = date_range(date_from, date_to)
+    department, available_departments = find_department(point)
+
+    if not department:
+        return None, {
+            "success": False,
+            "message": f"Point '{point}' not found",
+            "availablePoints": [
+                {"code": d.get("code"), "name": d.get("name")}
+                for d in available_departments
+            ],
+        }, 404
+
+    organization_id = department["organizationId"]
+    cache_key = (organization_id, date_from, date_to)
+    cached = _analytics_cache_get(cache_key)
+    if cached is not None:
+        payload = dict(cached)
+        payload["cache"] = {"hit": True, "ttlSeconds": ANALYTICS_TTL_SECONDS}
+        return payload, None, 200
+
+    documents = get_sales_documents(organization_id, date_from, date_to)
+    processed_documents = [
+        document
+        for document in documents
+        if not document.get("status") or document.get("status") == "PROCESSED"
+    ]
+
+    details_by_id, document_errors = fetch_document_details_parallel(
+        organization_id,
+        processed_documents,
+    )
+
+    totals = defaultdict(lambda: {
+        "quantity": 0.0,
+        "revenue": 0.0,
+        "article": None,
+    })
+
+    daily = {
+        day: {
+            "date": day,
+            "revenue": 0.0,
+            "itemsRevenue": 0.0,
+            "quantity": 0.0,
+            "documentsCount": 0,
+        }
+        for day in all_dates
+    }
+
+    for document in processed_documents:
+        document_id = document.get("documentId")
+        day = document_date(document, date_from)
+        if day not in daily:
+            daily[day] = {
+                "date": day,
+                "revenue": 0.0,
+                "itemsRevenue": 0.0,
+                "quantity": 0.0,
+                "documentsCount": 0,
+            }
+
+        daily[day]["revenue"] += float(document.get("sum") or 0)
+        daily[day]["documentsCount"] += 1
+
+        detail = details_by_id.get(document_id)
+        if not detail:
+            continue
+
+        for item in detail.get("items", []):
+            product_id = item.get("product")
+            if not product_id:
+                continue
+
+            quantity = float(item.get("amount") or 0)
+            revenue = float(item.get("sum") or 0)
+
+            totals[product_id]["quantity"] += quantity
+            totals[product_id]["revenue"] += revenue
+            daily[day]["quantity"] += quantity
+            daily[day]["itemsRevenue"] += revenue
+
+            if item.get("productArticle"):
+                totals[product_id]["article"] = item.get("productArticle")
+
+    try:
+        product_map = get_products_map()
+        nomenclature_warning = None
+    except Exception as error:
+        product_map = {}
+        nomenclature_warning = str(error)
+
+    products = []
+    for product_id, values in totals.items():
+        product_info = product_map.get(product_id, {})
+        products.append({
+            "productId": product_id,
+            "name": product_info.get("name") or product_id,
+            "article": product_info.get("article") or values.get("article"),
+            "quantity": round(values["quantity"], 3),
+            "revenue": round(values["revenue"], 2),
+        })
+
+    by_revenue = sorted(products, key=lambda item: item["revenue"], reverse=True)
+    by_quantity = sorted(products, key=lambda item: item["quantity"], reverse=True)
+
+    revenue_from_documents = round(
+        sum(float(document.get("sum") or 0) for document in processed_documents),
+        2,
+    )
+    revenue_from_items = round(sum(product["revenue"] for product in products), 2)
+    total_quantity = round(sum(product["quantity"] for product in products), 3)
+
+    daily_series = []
+    for day in sorted(daily.keys()):
+        item = daily[day]
+        daily_series.append({
+            "date": day,
+            "revenue": round(item["revenue"], 2),
+            "itemsRevenue": round(item["itemsRevenue"], 2),
+            "quantity": round(item["quantity"], 3),
+            "documentsCount": item["documentsCount"],
+        })
+
+    days_count = len(all_dates)
+    requested_details = len([
+        d for d in processed_documents if d.get("documentId")
+    ])
+    payload = {
+        "success": True,
+        "point": {
+            "code": department.get("code"),
+            "name": department.get("name"),
+            "organizationId": organization_id,
+        },
+        "period": {
+            "from": date_from,
+            "to": date_to,
+            "daysCount": days_count,
+        },
+        "summary": {
+            "documentsCount": len(processed_documents),
+            "revenue": revenue_from_documents,
+            "itemsRevenue": revenue_from_items,
+            "itemsQuantity": total_quantity,
+            "uniqueProducts": len(products),
+            "averageDailyRevenue": round(
+                revenue_from_documents / days_count, 2
+            ) if days_count else 0,
+        },
+        "daily": daily_series,
+        "topByRevenue": by_revenue[:20],
+        "topByQuantity": by_quantity[:20],
+        "products": by_revenue,
+        "warnings": {
+            "nomenclature": nomenclature_warning,
+            "documentDetails": document_errors,
+            "note": (
+                "Revenue is based on iiko inventory sales documents. "
+                "Average check and hourly sales require receipt/order-level data."
+            ),
+        },
+        "performance": {
+            "detailWorkers": min(DETAIL_WORKERS, max(requested_details, 1)),
+            "detailsRequested": requested_details,
+            "detailsLoaded": len(details_by_id),
+        },
+        "cache": {"hit": False, "ttlSeconds": ANALYTICS_TTL_SECONDS},
+    }
+
+    _analytics_cache_set(cache_key, payload)
+    return payload, None, 200
 
 
 @app.route("/")
@@ -322,7 +627,7 @@ def orders_access_test():
             "responseShape": {
                 "topLevelKeys": sorted(data.keys()) if isinstance(data, dict) else [],
                 "organizationBlocks": len(data.get("ordersByOrganizations", []) or [])
-                    if isinstance(data, dict) else 0,
+                if isinstance(data, dict) else 0,
             },
             "diagnosis": (
                 "Access granted and order-level records were returned."
@@ -364,176 +669,35 @@ def analytics():
         if not date_to:
             date_to = date_from
 
-        all_dates = date_range(date_from, date_to)
-        department, available_departments = find_department(point)
+        payload, error_payload, status = build_analytics(point, date_from, date_to)
+        if error_payload:
+            return jsonify(error_payload), status
+        return jsonify(payload), status
 
-        if not department:
-            return jsonify({
-                "success": False,
-                "message": f"Point '{point}' not found",
-                "availablePoints": [
-                    {"code": d.get("code"), "name": d.get("name")}
-                    for d in available_departments
-                ],
-            }), 404
-
-        organization_id = department["organizationId"]
-        documents = get_sales_documents(organization_id, date_from, date_to)
-
-        processed_documents = [
-            document
-            for document in documents
-            if not document.get("status") or document.get("status") == "PROCESSED"
-        ]
-
-        totals = defaultdict(lambda: {
-            "quantity": 0.0,
-            "revenue": 0.0,
-            "article": None,
-        })
-
-        daily = {
-            day: {
-                "date": day,
-                "revenue": 0.0,
-                "itemsRevenue": 0.0,
-                "quantity": 0.0,
-                "documentsCount": 0,
-            }
-            for day in all_dates
-        }
-
-        document_errors = []
-
-        for document in processed_documents:
-            document_id = document.get("documentId")
-            day = document_date(document, date_from)
-            if day not in daily:
-                daily[day] = {
-                    "date": day,
-                    "revenue": 0.0,
-                    "itemsRevenue": 0.0,
-                    "quantity": 0.0,
-                    "documentsCount": 0,
-                }
-
-            daily[day]["revenue"] += float(document.get("sum") or 0)
-            daily[day]["documentsCount"] += 1
-
-            if not document_id:
-                continue
-
-            try:
-                detail = get_sales_document(organization_id, document_id)
-            except requests.HTTPError as error:
-                document_errors.append({
-                    "documentId": document_id,
-                    "statusCode": error.response.status_code,
-                    "details": error.response.text,
-                })
-                continue
-
-            for item in detail.get("items", []):
-                product_id = item.get("product")
-                if not product_id:
-                    continue
-
-                quantity = float(item.get("amount") or 0)
-                revenue = float(item.get("sum") or 0)
-
-                totals[product_id]["quantity"] += quantity
-                totals[product_id]["revenue"] += revenue
-                daily[day]["quantity"] += quantity
-                daily[day]["itemsRevenue"] += revenue
-
-                if item.get("productArticle"):
-                    totals[product_id]["article"] = item.get("productArticle")
-
-        try:
-            product_map = get_products_map()
-            nomenclature_warning = None
-        except Exception as error:
-            product_map = {}
-            nomenclature_warning = str(error)
-
-        products = []
-        for product_id, values in totals.items():
-            product_info = product_map.get(product_id, {})
-            products.append({
-                "productId": product_id,
-                "name": product_info.get("name") or product_id,
-                "article": product_info.get("article") or values.get("article"),
-                "quantity": round(values["quantity"], 3),
-                "revenue": round(values["revenue"], 2),
-            })
-
-        by_revenue = sorted(products, key=lambda item: item["revenue"], reverse=True)
-        by_quantity = sorted(products, key=lambda item: item["quantity"], reverse=True)
-
-        revenue_from_documents = round(
-            sum(float(document.get("sum") or 0) for document in processed_documents),
-            2,
-        )
-        revenue_from_items = round(sum(product["revenue"] for product in products), 2)
-        total_quantity = round(sum(product["quantity"] for product in products), 3)
-
-        daily_series = []
-        for day in sorted(daily.keys()):
-            item = daily[day]
-            daily_series.append({
-                "date": day,
-                "revenue": round(item["revenue"], 2),
-                "itemsRevenue": round(item["itemsRevenue"], 2),
-                "quantity": round(item["quantity"], 3),
-                "documentsCount": item["documentsCount"],
-            })
-
-        days_count = len(all_dates)
-
-        return jsonify({
-            "success": True,
-            "point": {
-                "code": department.get("code"),
-                "name": department.get("name"),
-                "organizationId": organization_id,
-            },
-            "period": {
-                "from": date_from,
-                "to": date_to,
-                "daysCount": days_count,
-            },
-            "summary": {
-                "documentsCount": len(processed_documents),
-                "revenue": revenue_from_documents,
-                "itemsRevenue": revenue_from_items,
-                "itemsQuantity": total_quantity,
-                "uniqueProducts": len(products),
-                "averageDailyRevenue": round(
-                    revenue_from_documents / days_count, 2
-                ) if days_count else 0,
-            },
-            "daily": daily_series,
-            "topByRevenue": by_revenue[:20],
-            "topByQuantity": by_quantity[:20],
-            "products": by_revenue,
-            "warnings": {
-                "nomenclature": nomenclature_warning,
-                "documentDetails": document_errors,
-                "note": (
-                    "Revenue is based on iiko inventory sales documents. Average check and hourly sales require receipt/order-level data."
-                ),
-            },
-        })
-
-    except requests.HTTPError as error:
+    except requests.Timeout:
         return jsonify({
             "success": False,
-            "statusCode": error.response.status_code,
-            "details": error.response.text,
-        }), 500
+            "code": "IIKO_TIMEOUT",
+            "message": "iiko did not answer in time. Please retry the request.",
+        }), 504
+    except requests.HTTPError as error:
+        response = error.response
+        return jsonify({
+            "success": False,
+            "code": "IIKO_HTTP_ERROR",
+            "statusCode": response.status_code if response is not None else None,
+            "details": response.text[:1500] if response is not None else str(error),
+        }), 502
+    except ValueError as error:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_PERIOD",
+            "message": str(error),
+        }), 400
     except Exception as error:
         return jsonify({
             "success": False,
+            "code": "ANALYTICS_ERROR",
             "message": str(error),
         }), 500
 
