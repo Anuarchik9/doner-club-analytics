@@ -225,9 +225,9 @@ def sales_test():
                 f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/list",
                 headers=iiko_headers(),
                 json={
-                    "departmentId": department_id,
-                    "dateFrom": "2026-09-15T00:00:00",
-                    "dateTo": "2026-09-15T23:59:59"
+                    "organizationId": department_id,
+                    "from": "2026-09-15",
+                    "to": "2026-09-15"
                 },
                 timeout=30,
             )
