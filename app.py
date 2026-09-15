@@ -142,6 +142,62 @@ def orders_test():
             "success": False,
             "message": str(error)
         }), 500
+        @app.route("/orders")
+def orders():
+    try:
+        # Получаем активные организации
+        org_response = requests.post(
+            f"{IIKO_BASE_URL}/api/1/organizations",
+            headers=iiko_headers(),
+            json={
+                "returnAdditionalInfo": True,
+                "includeDisabled": False
+            },
+            timeout=20,
+        )
+
+        org_response.raise_for_status()
+        organizations = org_response.json().get("organizations", [])
+
+        organization_ids = [
+            org["id"] for org in organizations
+            if org.get("id")
+        ]
+
+        # Запрашиваем заказы за 15 сентября 2026
+        response = requests.post(
+            f"{IIKO_BASE_URL}/api/1/deliveries/by_delivery_date_and_status",
+            headers=iiko_headers(),
+            json={
+                "organizationIds": organization_ids,
+                "deliveryDateFrom": "2026-09-15 00:00:00.000",
+                "deliveryDateTo": "2026-09-15 23:59:59.999"
+            },
+            timeout=30,
+        )
+
+        response.raise_for_status()
+        data = response.json()
+
+        return jsonify({
+            "success": True,
+            "period": "2026-09-15",
+            "organizationCount": len(organization_ids),
+            "data": data
+        })
+
+    except requests.HTTPError as error:
+        return jsonify({
+            "success": False,
+            "status_code": error.response.status_code,
+            "details": error.response.text
+        }), 500
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
