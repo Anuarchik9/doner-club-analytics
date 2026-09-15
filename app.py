@@ -26,9 +26,14 @@ def get_iiko_token():
     )
 
     response.raise_for_status()
+    return response.json()["token"]
 
-    data = response.json()
-    return data["token"]
+
+def iiko_headers():
+    return {
+        "Authorization": f"Bearer {get_iiko_token()}",
+        "Content-Type": "application/json",
+    }
 
 
 @app.route("/")
@@ -50,10 +55,38 @@ def test_iiko():
             "token_received": bool(token)
         })
 
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
+
+
+@app.route("/organizations")
+def organizations():
+    try:
+        response = requests.post(
+            f"{IIKO_BASE_URL}/api/1/organizations",
+            headers=iiko_headers(),
+            json={
+                "returnAdditionalInfo": True,
+                "includeDisabled": True
+            },
+            timeout=20,
+        )
+
+        response.raise_for_status()
+        data = response.json()
+
+        return jsonify({
+            "success": True,
+            "count": len(data.get("organizations", [])),
+            "organizations": data.get("organizations", [])
+        })
+
     except requests.HTTPError as error:
         return jsonify({
             "success": False,
-            "message": "iikoCloud authentication failed",
             "status_code": error.response.status_code,
             "details": error.response.text
         }), 500
