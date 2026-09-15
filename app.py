@@ -97,7 +97,51 @@ def organizations():
             "message": str(error)
         }), 500
 
+@app.route("/orders-test")
+def orders_test():
+    try:
+        # Сначала получаем организации
+        org_response = requests.post(
+            f"{IIKO_BASE_URL}/api/1/organizations",
+            headers=iiko_headers(),
+            json={
+                "returnAdditionalInfo": True,
+                "includeDisabled": False
+            },
+            timeout=20,
+        )
 
+        org_response.raise_for_status()
+        org_data = org_response.json()
+
+        organizations = org_data.get("organizations", [])
+
+        return jsonify({
+            "success": True,
+            "message": "Ready to request iiko orders",
+            "count": len(organizations),
+            "organizations": [
+                {
+                    "id": org.get("id"),
+                    "name": org.get("name"),
+                    "code": org.get("code")
+                }
+                for org in organizations
+            ]
+        })
+
+    except requests.HTTPError as error:
+        return jsonify({
+            "success": False,
+            "status_code": error.response.status_code,
+            "details": error.response.text
+        }), 500
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
