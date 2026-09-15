@@ -256,7 +256,32 @@ def sales_test():
             "success": False,
             "message": str(error)
         }), 500
+@app.route("/departments-test")
+def departments_test():
+    try:
+        response = requests.post(
+            f"{IIKO_BASE_URL}/api/inventory/v1/departments",
+            headers=iiko_headers(),
+            json={},
+            timeout=30,
+        )
 
+        try:
+            data = response.json()
+        except Exception:
+            data = response.text
+
+        return jsonify({
+            "success": response.ok,
+            "statusCode": response.status_code,
+            "data": data
+        }), response.status_code
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
