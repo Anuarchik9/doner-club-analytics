@@ -201,21 +201,55 @@ def orders():
 @app.route("/sales-test")
 def sales_test():
     try:
-        response = requests.post(
-            f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/list",
+        # Сначала получаем организации Doner Club
+        org_response = requests.post(
+            f"{IIKO_BASE_URL}/api/1/organizations",
             headers=iiko_headers(),
             json={
-                "dateFrom": "2026-09-15T00:00:00",
-                "dateTo": "2026-09-15T23:59:59"
+                "returnAdditionalInfo": True,
+                "includeDisabled": False
             },
-            timeout=30,
+            timeout=20,
         )
 
+        org_response.raise_for_status()
+        organizations = org_response.json().get("organizations", [])
+
+        results = []
+
+        # Проверяем продажи отдельно по каждой организации
+        for org in organizations:
+            department_id = org.get("id")
+
+            response = requests.post(
+                f"{IIKO_BASE_URL}/api/inventory/v1/sales_document/list",
+                headers=iiko_headers(),
+                json={
+                    "departmentId": department_id,
+                    "dateFrom": "2026-09-15T00:00:00",
+                    "dateTo": "2026-09-15T23:59:59"
+                },
+                timeout=30,
+            )
+
+            try:
+                response_data = response.json()
+            except Exception:
+                response_data = response.text
+
+            results.append({
+                "organization": org.get("name"),
+                "organizationId": department_id,
+                "statusCode": response.status_code,
+                "data": response_data
+            })
+
         return jsonify({
-            "success": response.ok,
-            "status_code": response.status_code,
-            "data": response.json() if response.text else None
-        }), response.status_code
+            "success": True,
+            "date": "2026-09-15",
+            "organizationsChecked": len(organizations),
+            "results": results
+        })
 
     except Exception as error:
         return jsonify({
