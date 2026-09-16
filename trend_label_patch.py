@@ -16,8 +16,8 @@ def install_trend_label_patch(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/trend-label-patch.js"></script>'
-                if tag not in body and "</body>" in body:
+                tag = '<script src="/static/trend-label-patch.js?v=20260916-2"></script>'
+                if "trend-label-patch.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
             except Exception:
