@@ -6,6 +6,7 @@ import requests
 from flask import jsonify, session
 
 import app as core
+import iiko_cost
 import sales_channel
 
 
@@ -88,6 +89,7 @@ def build_economics(point, date_from, date_to, channel="all"):
         if not department:
             raise ValueError(f"Point '{point}' not found in iikoServer departments")
 
+        cost_field, cost_label = iiko_cost.discover_cost_field(base_url, token)
         rows = sales_channel._olap_request(
             base_url,
             token,
@@ -95,7 +97,7 @@ def build_economics(point, date_from, date_to, channel="all"):
             date_to,
             department.get("id"),
             ["DishId", "DishName", *sales_channel.CHANNEL_FIELDS],
-            ["DishDiscountSumInt", "Cost", "DishAmountInt"],
+            ["DishDiscountSumInt", cost_field, "DishAmountInt"],
         )
 
         selected = []
@@ -117,7 +119,7 @@ def build_economics(point, date_from, date_to, channel="all"):
             name = str(row.get("DishName") or "Позиция iiko")
             product_id = str(row.get("DishId") or name)
             revenue = float(row.get("DishDiscountSumInt") or 0)
-            cost = float(row.get("Cost") or 0)
+            cost = iiko_cost.cost_value(row, cost_field)
             quantity = float(row.get("DishAmountInt") or 0)
 
             item = products.setdefault(product_id, {
@@ -171,7 +173,9 @@ def build_economics(point, date_from, date_to, channel="all"):
 
         result = {
             "success": True,
-            "source": "iikoServer OLAP SALES / Cost",
+            "source": "iikoServer OLAP SALES / dynamic cost field",
+            "costField": cost_field,
+            "costLabel": cost_label,
             "point": {
                 "id": department.get("id"),
                 "code": department.get("code"),
