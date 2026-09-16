@@ -13,6 +13,7 @@ def post_worker_init(worker):
     from management_features import install_management_features
     from economics_features import install_economics_features
     from stop_loss import install_stop_loss
+    from trend_features import install_trend_features
     from sales_channel import install_sales_channel
     from team_meal import install_team_meal
     from speed_patch import install_speed_patch
@@ -21,7 +22,8 @@ def post_worker_init(worker):
     from dashboard_polish import install_dashboard_polish
 
     install_auth(worker.wsgi)
-    # Registered before management so its injected JS appears after management JS in the page.
+    # Register trend first so its injected script is placed last and can coordinate all dashboard patches.
+    install_trend_features(worker.wsgi)
     install_dashboard_polish(worker.wsgi)
     install_management_features(worker.wsgi)
     install_economics_features(worker.wsgi)
