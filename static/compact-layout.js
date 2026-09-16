@@ -29,15 +29,24 @@
     .dc-brand-badge.yandex i{color:#ff5252}.dc-brand-badge.wolt i{color:#5bc9ff}.dc-brand-badge.glovo i{color:#ffd34d}.dc-brand-badge.choco i{color:#ff9a63}.dc-brand-badge.starter i{color:#a8e063}
     .dc-brand-badge.kaspi i{color:#ff5555}.dc-brand-badge.cash i{color:#8fe1ad}.dc-brand-badge.card i{color:#9ec7ff}.dc-brand-badge.call i{color:#ffb36b}
 
+    /* Offline badges use a strict 2×2 grid so a single badge can never stretch across the card. */
+    .dc-offline-card{padding-right:42%!important}
+    .dc-offline-card .dc-mix-icons{display:grid!important;grid-template-columns:repeat(2,minmax(105px,1fr));grid-auto-rows:38px;gap:9px;width:min(38%,300px)!important;right:20px!important;left:auto!important;top:50%!important;bottom:auto!important;transform:translateY(-50%)!important;align-content:center;justify-content:stretch!important}
+    .dc-offline-card .dc-brand-badge{width:100%!important;min-width:0!important;height:38px!important;padding:0 10px!important;justify-content:flex-start!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
     @media(max-width:900px){
       #categoryList .cat-row{grid-template-columns:minmax(0,1fr) minmax(120px,.8fr) auto!important}
       .channel-mix-card{padding-right:20px!important;padding-bottom:84px!important}
       .dc-mix-icons{left:20px;right:20px;bottom:16px;top:auto;transform:none;width:auto;justify-content:flex-start}
+      .dc-offline-card{padding-right:20px!important;padding-bottom:116px!important}
+      .dc-offline-card .dc-mix-icons{left:20px!important;right:20px!important;bottom:16px!important;top:auto!important;transform:none!important;width:auto!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
     }
     @media(max-width:600px){
       #categoryList .cat-row{grid-template-columns:1fr!important}
       #categoryList .cat-share{text-align:left!important}
       .dc-brand-badge{height:31px;padding:0 8px}
+      .dc-offline-card .dc-mix-icons{grid-auto-rows:34px!important;gap:7px!important}
+      .dc-offline-card .dc-brand-badge{height:34px!important;font-size:9px!important}
     }
   `;
   document.head.appendChild(style);
@@ -120,11 +129,17 @@
     const online=$('onlineSales')?.closest('.channel-mix-card');
     const offline=$('offlineSales')?.closest('.channel-mix-card');
     if(!online||!offline)return false;
+    online.classList.add('dc-online-card');
+    offline.classList.add('dc-offline-card');
     if(!online.querySelector('.dc-mix-icons')){
       const box=document.createElement('div');box.className='dc-mix-icons';box.innerHTML=onlineBadges;online.appendChild(box);
     }
-    if(!offline.querySelector('.dc-mix-icons')){
-      const box=document.createElement('div');box.className='dc-mix-icons';box.innerHTML=offlineBadges;offline.appendChild(box);
+    let offlineBox=offline.querySelector('.dc-mix-icons');
+    if(!offlineBox){
+      offlineBox=document.createElement('div');offlineBox.className='dc-mix-icons dc-offline-icons';offlineBox.innerHTML=offlineBadges;offline.appendChild(offlineBox);
+    } else {
+      offlineBox.classList.add('dc-offline-icons');
+      offlineBox.innerHTML=offlineBadges;
     }
     return true;
   }
