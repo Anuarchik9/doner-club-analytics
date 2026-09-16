@@ -10,15 +10,16 @@
     .tablebox th:nth-child(3),.tablebox td:nth-child(3){width:125px!important;min-width:125px!important}
     .tablebox th:nth-child(4),.tablebox td:nth-child(4){width:155px!important;min-width:155px!important}
     .tablebox td:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .logo{width:48px!important;height:48px!important;border-radius:15px!important;background:transparent!important;overflow:hidden!important;padding:0!important;display:block!important;line-height:0!important}
-    .logo img{display:block;width:100%;height:100%;object-fit:cover;border-radius:15px}
+    .logo{width:48px!important;height:48px!important;border-radius:15px!important;background:transparent!important;overflow:hidden!important;padding:0!important;display:block!important;line-height:0!important;flex:0 0 48px}
+    .logo svg{display:block;width:100%;height:100%;border-radius:15px}
     .meat-cards.dc-three{grid-template-columns:repeat(3,1fr)!important}
     @media(max-width:700px){.meat-cards.dc-three{grid-template-columns:1fr!important}.tablebox table{min-width:570px!important}.tablebox th:nth-child(3),.tablebox td:nth-child(3){width:105px!important;min-width:105px!important}.tablebox th:nth-child(4),.tablebox td:nth-child(4){width:135px!important;min-width:135px!important}}
   `;
   document.head.appendChild(style);
 
+  // Keep the brand mark inline so it cannot break because of an external image/static-cache issue.
   const logo=document.querySelector('.logo');
-  if(logo) logo.innerHTML='<img src="/static/brand-logo.svg" alt="Doner Club">';
+  if(logo) logo.innerHTML=`<svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Doner Club shaurma house"><rect width="160" height="160" rx="30" fill="#f75b24"/><g fill="#fff" font-family="Arial Black,Inter,Arial,sans-serif" font-weight="900"><text x="18" y="69" font-size="39" letter-spacing="-2.7">DONER</text><text x="18" y="112" font-size="43" letter-spacing="-2.7">CLUB</text><text x="101" y="88" font-size="10" letter-spacing="-.4">shaurma</text><text x="101" y="99" font-size="10" letter-spacing="-.4">house</text></g></svg>`;
 
   const search=document.getElementById('search');
   if(search) search.placeholder='Поиск по названию';
