@@ -6,6 +6,10 @@
   const money=new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0});
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+  const style=document.createElement('style');
+  style.textContent=`.dc-hide-month-duplicate{display:none!important}`;
+  document.head.appendChild(style);
+
   function categoryOf(name){
     const n=String(name||'').toLowerCase();
     if(n.includes('комбо')||n.includes('combo')||n.includes('go!'))return'Комбо';
@@ -59,11 +63,14 @@
   function syncMonthlyDynamic(){
     const a=document.getElementById('from')?.value,b=document.getElementById('to')?.value;
     const block=findSection('Динамика выручки');
-    if(!a||!b||!block)return;
-    const s=parse(a),e=parse(b);
-    const isMonthReport=s.getDate()===1&&s.getFullYear()===e.getFullYear()&&s.getMonth()===e.getMonth();
-    if(block.head)block.head.style.display=isMonthReport?'none':'';
-    if(block.body)block.body.style.display=isMonthReport?'none':'';
+    if(!block)return;
+    let isMonthReport=false;
+    if(a&&b){
+      const s=parse(a),e=parse(b);
+      isMonthReport=s.getDate()===1&&s.getFullYear()===e.getFullYear()&&s.getMonth()===e.getMonth();
+    }
+    block.head?.classList.toggle('dc-hide-month-duplicate',isMonthReport);
+    block.body?.classList.toggle('dc-hide-month-duplicate',isMonthReport);
   }
 
   function refresh(){
@@ -72,13 +79,16 @@
   }
 
   document.getElementById('go')?.addEventListener('click',()=>{
+    setTimeout(refresh,100);
     setTimeout(refresh,500);
     setTimeout(refresh,1600);
     setTimeout(refresh,3000);
+    setTimeout(refresh,7000);
   });
-  document.getElementById('from')?.addEventListener('change',()=>setTimeout(syncMonthlyDynamic,150));
+  document.getElementById('from')?.addEventListener('change',()=>setTimeout(syncMonthlyDynamic,80));
   document.getElementById('to')?.addEventListener('change',()=>setTimeout(syncMonthlyDynamic,80));
   document.querySelector('.presets')?.addEventListener('click',()=>setTimeout(syncMonthlyDynamic,80));
   document.querySelectorAll('.report-mode-btn').forEach(btn=>btn.addEventListener('click',()=>setTimeout(syncMonthlyDynamic,30)));
-  setTimeout(refresh,1400);
+  setTimeout(refresh,900);
+  setTimeout(refresh,1800);
 })();
