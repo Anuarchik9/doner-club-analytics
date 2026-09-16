@@ -16,9 +16,12 @@ def install_mobile_responsive_fix(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/mobile-responsive-fix.js?v=20260917-2"></script>'
+                tags = ['<script src="/static/mobile-responsive-fix.js?v=20260917-3"></script>']
+                if request.path.endswith("revisions.html"):
+                    tags.append('<script src="/static/mobile-revisions-overflow-fix.js?v=20260917-1"></script>')
+                insertion = ''.join(tags)
                 if "mobile-responsive-fix.js" not in body and "</body>" in body:
-                    response.set_data(body.replace("</body>", tag + "</body>", 1))
+                    response.set_data(body.replace("</body>", insertion + "</body>", 1))
                     response.headers.pop("Content-Length", None)
             except Exception:
                 pass
