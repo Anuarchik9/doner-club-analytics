@@ -32,6 +32,7 @@ def post_worker_init(worker):
     from progress_ui import install_progress_ui
     from dashboard_category_readability import install_dashboard_category_readability
     from wide_period_click import install_wide_period_click
+    from custom_select import install_custom_select
 
     install_auth(worker.wsgi)
     install_revisions_data_v7(worker.wsgi)
@@ -40,6 +41,8 @@ def post_worker_init(worker):
     install_dashboard_category_readability(worker.wsgi)
     # Make the full visible date/month fields clickable on both dashboard pages.
     install_wide_period_click(worker.wsgi)
+    # Replace native select menus with the same dark custom UI on revisions and sales analytics.
+    install_custom_select(worker.wsgi)
     # The first registered after-request extension is injected last into the HTML.
     # Register progress early so its JS executes after the other page extensions.
     install_progress_ui(worker.wsgi)
