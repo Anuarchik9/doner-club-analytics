@@ -3,8 +3,10 @@ def post_worker_init(worker):
     from sales_channel import install_sales_channel
     from team_meal import install_team_meal
     from chart_hover import install_chart_hover
+    from preset_controls import install_preset_controls
 
     install_auth(worker.wsgi)
     install_sales_channel(worker.wsgi)
     install_team_meal(worker.wsgi)
     install_chart_hover(worker.wsgi)
+    install_preset_controls(worker.wsgi)
