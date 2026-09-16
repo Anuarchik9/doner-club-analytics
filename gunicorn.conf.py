@@ -21,7 +21,8 @@ def post_worker_init(worker):
     from dashboard_polish import install_dashboard_polish
 
     install_auth(worker.wsgi)
-    # Register dashboard extensions before the display patches.
+    # Registered before management so its injected JS appears after management JS in the page.
+    install_dashboard_polish(worker.wsgi)
     install_management_features(worker.wsgi)
     install_economics_features(worker.wsgi)
     install_stop_loss(worker.wsgi)
@@ -30,4 +31,3 @@ def post_worker_init(worker):
     install_speed_patch(worker.wsgi)
     install_chart_hover(worker.wsgi)
     install_preset_controls(worker.wsgi)
-    install_dashboard_polish(worker.wsgi)
