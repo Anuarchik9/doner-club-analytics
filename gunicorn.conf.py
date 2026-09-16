@@ -34,12 +34,17 @@ def post_worker_init(worker):
     from dashboard_category_readability import install_dashboard_category_readability
     from wide_period_click import install_wide_period_click
     from custom_select import install_custom_select
+    from mobile_responsive_fix import install_mobile_responsive_fix
 
     # Extend the dashboard allowlist before auth routes start serving requests.
     # Passwords are still validated directly by iikoServer.
     install_auth_allowlist_patch()
     install_auth(worker.wsgi)
     install_revisions_data_v7(worker.wsgi)
+    # Register the mobile override first among HTML injectors: Flask runs
+    # after_request hooks in reverse order, so this script is injected last
+    # and can safely win over older desktop-oriented CSS on iPhones.
+    install_mobile_responsive_fix(worker.wsgi)
     # Register dashboard readability/category guard early so its JS is injected
     # after the older dashboard extensions and wins any late category redraws.
     install_dashboard_category_readability(worker.wsgi)
