@@ -16,8 +16,8 @@ def install_compact_layout(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/compact-layout.js"></script>'
-                if tag not in body and "</body>" in body:
+                tag = '<script src="/static/compact-layout.js?v=20260916-2"></script>'
+                if "compact-layout.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
             except Exception:
