@@ -43,7 +43,7 @@
 
   const nf = new Intl.NumberFormat('ru-RU',{maximumFractionDigits:1});
   const money = new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0});
-  const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 
   function products(){
     try { return (typeof currentData !== 'undefined' && currentData?.products) || []; }
@@ -84,9 +84,7 @@
     const wanted=arr.map(x=>x.name);
     const current=[...root.querySelectorAll(':scope > .cat-row .cat-name strong')].map(x=>(x.textContent||'').trim());
     const wrongNames=current.length!==wanted.length || current.some((x,i)=>x!==wanted[i]);
-    const otherText=[...root.querySelectorAll(':scope > .cat-row')].find(r=>(r.querySelector('.cat-name strong')?.textContent||'').trim()==='Другие позиции')?.textContent?.toLowerCase()||'';
-    const batonLeak=otherText.includes('батон')||otherText.includes('baton');
-    if(!wrongNames && !batonLeak) return;
+    if(!wrongNames) return;
 
     rendering=true;
     const total=arr.reduce((s,x)=>s+x.revenue,0)||1;
@@ -121,7 +119,7 @@
     if(note) note.textContent='Только донеры. Батоны и комбо сюда не входят.';
     const sizePanel=document.getElementById('donerMixBlock')?.querySelectorAll('.panel')?.[1];
     const sizeSub=sizePanel?.querySelector('.muted');
-    if(sizeSub && !sizeSub.textContent.includes('Батоны')) sizeSub.textContent='Мини · Стандарт · 1.5 · Двойной · только донеры, без батонов';
+    if(sizeSub && !sizeSub.textContent.includes('батонов')) sizeSub.textContent='Мини · Стандарт · 1.5 · Двойной · только донеры, без батонов';
   }
 
   function enforce(){
