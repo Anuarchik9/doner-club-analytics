@@ -53,6 +53,7 @@
     <button class="preset" data-preset="current-month">Текущий месяц</button>
     <button class="preset" data-preset="current-week">Текущая неделя</button>
     <button class="preset" data-preset="previous-week">Прошлая неделя</button>
+    <button class="preset" data-preset="today" data-d="0">Сегодня</button>
     <button class="preset" data-preset="yesterday" data-d="1">Вчера</button>
     <button class="preset" data-preset="day-before" data-d="2">Позавчера</button>
     ${months.map((m, i) => `<button class="preset" data-preset="month" data-month-index="${i}">${m.label}</button>`).join('')}
@@ -82,6 +83,11 @@
       }
       if (type === 'previous-week') {
         setDates(previousWeek.from, previousWeek.to, button);
+        return;
+      }
+      if (type === 'today') {
+        const value = isoLocal(now);
+        setDates(value, value, button);
         return;
       }
       if (type === 'yesterday') {
