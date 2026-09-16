@@ -22,7 +22,7 @@
   document.head.appendChild(style);
 
   const logo = document.querySelector('.logo');
-  if (logo) logo.innerHTML = '<img src="/static/brand-logo.svg?v=20260916-5" alt="Doner Club">';
+  if (logo) logo.innerHTML = '<img src="/static/brand-logo.svg?v=20260916-6" alt="Doner Club">';
 
   function tagMixGroups(){
     const online=document.getElementById('onlineSales')?.closest('.channel-mix-card')?.querySelector('.dc-mix-icons');
