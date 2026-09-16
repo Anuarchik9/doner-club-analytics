@@ -1,3 +1,6 @@
+from flask import request
+
+
 def install_chart_hover(app):
     if getattr(app, "_doner_chart_hover_installed", False):
         return
@@ -8,7 +11,7 @@ def install_chart_hover(app):
         if (
             response.status_code == 200
             and response.mimetype == "text/html"
-            and response.request.path.endswith("dashboard-v2.html")
+            and request.path.endswith("dashboard-v2.html")
         ):
             try:
                 response.direct_passthrough = False
