@@ -14,6 +14,27 @@
     return `${y}-${m}-${day}`;
   }
 
+  function startOfWeek(d) {
+    const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const day = date.getDay(); // 0 = Sunday
+    const diff = day === 0 ? -6 : 1 - day;
+    date.setDate(date.getDate() + diff);
+    return date;
+  }
+
+  function weekRange(offsetWeeks = 0) {
+    const now = new Date();
+    const monday = startOfWeek(now);
+    monday.setDate(monday.getDate() - offsetWeeks * 7);
+    const end = new Date(monday);
+    if (offsetWeeks === 0) {
+      end.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
+    } else {
+      end.setDate(end.getDate() + 6);
+    }
+    return { from: isoLocal(monday), to: isoLocal(end) };
+  }
+
   function monthRange(offset) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
@@ -24,10 +45,14 @@
   }
 
   const currentMonth = monthRange(0);
+  const currentWeek = weekRange(0);
+  const previousWeek = weekRange(1);
   const months = [monthRange(1), monthRange(2), monthRange(3)];
 
   root.innerHTML = `
     <button class="preset" data-preset="current-month">Текущий месяц</button>
+    <button class="preset" data-preset="current-week">Текущая неделя</button>
+    <button class="preset" data-preset="previous-week">Прошлая неделя</button>
     <button class="preset" data-preset="yesterday" data-d="1">Вчера</button>
     <button class="preset" data-preset="day-before" data-d="2">Позавчера</button>
     ${months.map((m, i) => `<button class="preset" data-preset="month" data-month-index="${i}">${m.label}</button>`).join('')}
@@ -49,6 +74,14 @@
       const now = new Date();
       if (type === 'current-month') {
         setDates(currentMonth.from, currentMonth.to, button);
+        return;
+      }
+      if (type === 'current-week') {
+        setDates(currentWeek.from, currentWeek.to, button);
+        return;
+      }
+      if (type === 'previous-week') {
+        setDates(previousWeek.from, previousWeek.to, button);
         return;
       }
       if (type === 'yesterday') {
@@ -87,8 +120,6 @@
       toInput.min = fromInput.value;
       if (!toInput.value || toInput.value < fromInput.value) toInput.value = fromInput.value;
 
-      // After choosing the first date, immediately move the user to the end date.
-      // showPicker works in supported mobile/desktop browsers; focus/click are safe fallbacks.
       setTimeout(() => {
         try {
           toInput.focus({ preventScroll: true });
