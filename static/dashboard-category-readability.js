@@ -29,7 +29,18 @@
     #categoryList .cat-row{grid-template-columns:minmax(240px,350px) minmax(340px,1fr) 145px!important;gap:20px!important;align-items:center!important}
     #categoryList .cat-name strong{font-size:16px!important;line-height:1.3!important}
     #categoryList .cat-name>span:not(.dc-other-breakdown){font-size:12.5px!important;line-height:1.45!important;margin-top:4px!important}
-    #categoryList .dc-other-breakdown{font-size:12px!important;line-height:1.5!important;max-width:680px!important;margin-top:6px!important}
+    /* Old scripts may still write this legacy helper; keep it hidden and render the canonical list below. */
+    #categoryList .dc-other-breakdown{display:none!important}
+    #categoryList .dc-other-audit{display:block;margin-top:6px;color:#c8c8c1;font-size:12px;line-height:1.5;max-width:760px}
+    #categoryList .dc-other-preview{display:inline}
+    #categoryList .dc-other-more{appearance:none;border:0;background:transparent;color:#ff8b5e;font:inherit;font-weight:850;padding:0 2px;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+    #categoryList .dc-other-more:hover{color:#fff}
+    #categoryList .dc-other-full{margin-top:9px;padding:11px 12px;border:1px solid #343434;border-radius:12px;background:#0d0d0d;display:grid;gap:7px;max-height:250px;overflow:auto}
+    #categoryList .dc-other-full[hidden]{display:none!important}
+    #categoryList .dc-other-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;padding-bottom:6px;border-bottom:1px solid #222}
+    #categoryList .dc-other-item:last-child{border-bottom:0;padding-bottom:0}
+    #categoryList .dc-other-item b{font-size:11.5px;line-height:1.35;color:#eee;overflow-wrap:anywhere}
+    #categoryList .dc-other-item span{font-size:10.5px!important;color:#8e8e88;white-space:nowrap}
     #categoryList .cat-share{font-size:15px!important;font-weight:900!important}
     #categoryList .track{height:9px!important}
 
@@ -56,6 +67,8 @@
     @media(max-width:600px){
       body{font-size:14px!important}.wrap{padding-left:12px!important;padding-right:12px!important}
       #categoryList .cat-row{grid-template-columns:1fr!important}.value{font-size:35px!important}.hero h1{font-size:38px!important}
+      #categoryList .dc-other-item{grid-template-columns:1fr}
+      #categoryList .dc-other-item span{white-space:normal}
     }
   `;
   document.head.appendChild(style);
@@ -71,13 +84,20 @@
     catch (_) { return []; }
   }
 
+  function startsProduct(n,word){
+    return n===word || n.startsWith(`${word} `) || n.startsWith(`${word}-`) || n.startsWith(`${word}(`);
+  }
+
   function categoryOf(name){
-    const n=String(name||'').toLowerCase();
+    const n=String(name||'').trim().toLowerCase();
     if(n.includes('комбо')||n.includes('combo')||n.includes('go!')) return 'Комбо';
     if(n.includes('батон')||n.includes('baton')) return 'Батоны';
     if(n.includes('донер')||n.includes('doner')) return 'Донеры';
-    if(n.includes('pepsi')||n.includes('айран')||n.includes('вода')||n.includes('сок')||n.includes('чай')||n.includes('кофе')||n.includes('напит')) return 'Напитки';
-    if(n.includes('фри')||n.includes('наггет')||n.includes('картоф')||n.includes('закуск')) return 'Гарниры и закуски';
+    if(
+      n.includes('pepsi')||n.includes('айран')||n.includes('вода')||n.includes('сок')||n.includes('чай')||n.includes('кофе')||n.includes('напит')||
+      n.includes('mirinda')||n.includes('миринда')||startsProduct(n,'кинза')||startsProduct(n,'ава')
+    ) return 'Напитки';
+    if(n.includes('фри')||n.includes('наггет')||n.includes('картоф')||n.includes('закуск')||n.includes('стрипс')||n.includes('strip')) return 'Гарниры и закуски';
     if(n.includes('соус')||n.includes('халап')||n.includes('сыр')||n.includes('добав')) return 'Соусы и добавки';
     return 'Другие позиции';
   }
@@ -94,6 +114,19 @@
     return Object.values(groups).sort((a,b)=>b.revenue-a.revenue);
   }
 
+  function otherAuditHtml(list){
+    const sorted=list.slice().sort((a,b)=>Number(b.revenue||0)-Number(a.revenue||0));
+    const preview=sorted.slice(0,4);
+    const rest=sorted.slice(4);
+    const previewText=preview.map(p=>esc(p.name)).join(' · ');
+    const restHtml=rest.map(p=>`<div class="dc-other-item"><b>${esc(p.name)}</b><span>${nf.format(Number(p.quantity||0))} ед. · ${rub(p.revenue)}</span></div>`).join('');
+    return `<span class="dc-other-preview">Внутри: ${previewText}${rest.length?' · ':''}</span>${rest.length?`<button type="button" class="dc-other-more" aria-expanded="false">ещё ${rest.length}</button><div class="dc-other-full" hidden>${restHtml}</div>`:''}`;
+  }
+
+  function otherKey(list){
+    return list.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ru')).map(p=>`${p.name}|${Number(p.quantity||0)}|${Number(p.revenue||0)}`).join('¦');
+  }
+
   let rendering=false;
   let queued=false;
   function renderCanonical(){
@@ -107,8 +140,8 @@
     const wrongNames=current.length!==wanted.length || current.some((x,i)=>x!==wanted[i]);
     const otherText=[...root.querySelectorAll(':scope > .cat-row')]
       .find(r=>(r.querySelector('.cat-name strong')?.textContent||'').trim()==='Другие позиции')?.textContent?.toLowerCase()||'';
-    const batonLeaked=otherText.includes('батон')||otherText.includes('baton');
-    if(!wrongNames && !batonLeaked) return;
+    const leaked=otherText.includes('батон')||otherText.includes('baton')||otherText.includes('кинза')||otherText.includes('миринда')||otherText.includes('стрипс');
+    if(!wrongNames && !leaked) return;
 
     rendering=true;
     const total=arr.reduce((s,x)=>s+x.revenue,0)||1;
@@ -116,7 +149,7 @@
     root.innerHTML=arr.map(x=>{
       const share=x.revenue/total*100;
       const details=x.name==='Другие позиции'
-        ? `<span class="dc-other-breakdown">Внутри: ${x.products.slice().sort((a,b)=>Number(b.revenue||0)-Number(a.revenue||0)).slice(0,4).map(p=>esc(p.name)).join(' · ')}${x.products.length>4?` · ещё ${x.products.length-4}`:''}</span>`
+        ? `<span class="dc-other-breakdown"></span><div class="dc-other-audit" data-key="${esc(otherKey(x.products))}">${otherAuditHtml(x.products)}</div>`
         : '';
       return `<div class="cat-row"><div class="cat-name"><strong>${esc(x.name)}</strong><span>${nf.format(x.quantity)} ед. · ${nf.format(share)}% выручки</span>${details}</div><div class="track"><div class="fill" style="width:${Math.max(2,x.revenue/max*100)}%"></div></div><div class="cat-share">${money.format(x.revenue)} ₸</div></div>`;
     }).join('');
@@ -129,12 +162,16 @@
     const row=[...root.querySelectorAll(':scope > .cat-row')].find(r=>(r.querySelector('.cat-name strong')?.textContent||'').trim()==='Другие позиции');
     if(!row) return;
     const otherProducts=products().filter(p=>categoryOf(p.name)==='Другие позиции').sort((a,b)=>Number(b.revenue||0)-Number(a.revenue||0));
-    const names=otherProducts.slice(0,4).map(p=>String(p.name||'').trim()).filter(Boolean);
-    const more=Math.max(0,otherProducts.length-names.length);
-    const text=`Внутри: ${names.join(' · ')}${more?` · ещё ${more}`:''}`;
-    let detail=row.querySelector('.dc-other-breakdown');
-    if(!detail){detail=document.createElement('span');detail.className='dc-other-breakdown';row.querySelector('.cat-name')?.appendChild(detail)}
-    setText(detail,text);
+    const key=otherKey(otherProducts);
+    const box=row.querySelector('.cat-name');
+    let legacy=row.querySelector('.dc-other-breakdown');
+    if(!legacy){legacy=document.createElement('span');legacy.className='dc-other-breakdown';box?.appendChild(legacy)}
+    let audit=row.querySelector('.dc-other-audit');
+    if(!audit){audit=document.createElement('div');audit.className='dc-other-audit';box?.appendChild(audit)}
+    if(audit && audit.dataset.key!==key){
+      audit.dataset.key=key;
+      audit.innerHTML=otherAuditHtml(otherProducts);
+    }
   }
 
   function isTrueDoner(name){
@@ -233,7 +270,22 @@
   }
 
   const categoryRoot=document.getElementById('categoryList');
-  if(categoryRoot) new MutationObserver(queue).observe(categoryRoot,{childList:true,subtree:true});
+  if(categoryRoot){
+    new MutationObserver(queue).observe(categoryRoot,{childList:true,subtree:true});
+    categoryRoot.addEventListener('click',event=>{
+      const button=event.target.closest('.dc-other-more');
+      if(!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const full=button.nextElementSibling;
+      if(!full?.classList.contains('dc-other-full')) return;
+      const opening=full.hidden;
+      full.hidden=!opening;
+      button.setAttribute('aria-expanded',String(opening));
+      const count=full.querySelectorAll('.dc-other-item').length;
+      button.textContent=opening?'свернуть':`ещё ${count}`;
+    });
+  }
   const donerRoot=document.getElementById('donerMixBlock');
   if(donerRoot) new MutationObserver(queue).observe(donerRoot,{childList:true,subtree:true});
 
