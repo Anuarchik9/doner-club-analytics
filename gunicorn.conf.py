@@ -10,6 +10,7 @@ keepalive = 5
 
 def post_worker_init(worker):
     from dashboard_auth import install_auth
+    from management_features import install_management_features
     from sales_channel import install_sales_channel
     from team_meal import install_team_meal
     from speed_patch import install_speed_patch
@@ -17,6 +18,8 @@ def post_worker_init(worker):
     from preset_controls import install_preset_controls
 
     install_auth(worker.wsgi)
+    # Register this early so its injected script is placed after the other dashboard patches.
+    install_management_features(worker.wsgi)
     install_sales_channel(worker.wsgi)
     install_team_meal(worker.wsgi)
     install_speed_patch(worker.wsgi)
