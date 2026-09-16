@@ -82,7 +82,11 @@
       stopItems.dataset.dcFiveWatch='1';
       new MutationObserver(()=>setTimeout(forceFiveRowButtons,0)).observe(stopItems,{childList:true});
     }
-    $('search')?.addEventListener('input',()=>setTimeout(forceFiveRowButtons,0));
+    const search = $('search');
+    if (search && !search.dataset.dcFiveWatch) {
+      search.dataset.dcFiveWatch='1';
+      search.addEventListener('input',()=>setTimeout(forceFiveRowButtons,0));
+    }
     forceFiveRowButtons();
   }
 
@@ -132,14 +136,22 @@
     online.classList.add('dc-online-card');
     offline.classList.add('dc-offline-card');
     if(!online.querySelector('.dc-mix-icons')){
-      const box=document.createElement('div');box.className='dc-mix-icons';box.innerHTML=onlineBadges;online.appendChild(box);
+      const box=document.createElement('div');
+      box.className='dc-mix-icons';
+      box.innerHTML=onlineBadges;
+      online.appendChild(box);
     }
     let offlineBox=offline.querySelector('.dc-mix-icons');
     if(!offlineBox){
-      offlineBox=document.createElement('div');offlineBox.className='dc-mix-icons dc-offline-icons';offlineBox.innerHTML=offlineBadges;offline.appendChild(offlineBox);
-    } else {
-      offlineBox.classList.add('dc-offline-icons');
+      offlineBox=document.createElement('div');
+      offlineBox.className='dc-mix-icons dc-offline-icons';
       offlineBox.innerHTML=offlineBadges;
+      offline.appendChild(offlineBox);
+    } else {
+      // Important: do not rewrite innerHTML here. A body-wide MutationObserver watches
+      // child-list changes; rewriting an already-correct box would recursively trigger
+      // the observer forever and freeze the page.
+      offlineBox.classList.add('dc-offline-icons');
     }
     return true;
   }
@@ -150,7 +162,15 @@
     installMixIcons();
   }
   boot();
-  const observer=new MutationObserver(()=>boot());
+  let bootQueued=false;
+  const observer=new MutationObserver(()=>{
+    if(bootQueued)return;
+    bootQueued=true;
+    requestAnimationFrame(()=>{
+      bootQueued=false;
+      boot();
+    });
+  });
   observer.observe(document.body,{childList:true,subtree:true});
   setTimeout(boot,900);setTimeout(boot,2200);
 })();
