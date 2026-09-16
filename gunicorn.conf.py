@@ -10,6 +10,7 @@ keepalive = 5
 
 def post_worker_init(worker):
     from dashboard_auth import install_auth
+    from auth_allowed_users import install_auth_allowlist_patch
     from management_features import install_management_features
     from economics_features import install_economics_features
     from stop_loss import install_stop_loss
@@ -34,6 +35,9 @@ def post_worker_init(worker):
     from wide_period_click import install_wide_period_click
     from custom_select import install_custom_select
 
+    # Extend the dashboard allowlist before auth routes start serving requests.
+    # Passwords are still validated directly by iikoServer.
+    install_auth_allowlist_patch()
     install_auth(worker.wsgi)
     install_revisions_data_v7(worker.wsgi)
     # Register dashboard readability/category guard early so its JS is injected
