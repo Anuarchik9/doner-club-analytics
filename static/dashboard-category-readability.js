@@ -33,7 +33,7 @@
     #categoryList .cat-share{font-size:15px!important;font-weight:900!important}
     #categoryList .track{height:9px!important}
 
-    /* Doner mix and the rest of analytics should be readable from a normal desktop distance. */
+    /* Meat + doner-size analytics should be readable from a normal desktop distance. */
     .doner-mix-grid{gap:18px!important}
     .meat-card{padding:19px!important}
     .meat-card small{font-size:12.5px!important}
@@ -64,6 +64,7 @@
   const money = new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0});
   const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const rub = v => `${money.format(Number(v||0))} ₸`;
+  const setText = (el,text) => { if(el && el.textContent !== text) el.textContent = text; };
 
   function products(){
     try { return (typeof currentData !== 'undefined' && currentData?.products) || []; }
@@ -133,13 +134,18 @@
     const text=`Внутри: ${names.join(' · ')}${more?` · ещё ${more}`:''}`;
     let detail=row.querySelector('.dc-other-breakdown');
     if(!detail){detail=document.createElement('span');detail.className='dc-other-breakdown';row.querySelector('.cat-name')?.appendChild(detail)}
-    if(detail && detail.textContent!==text) detail.textContent=text;
+    setText(detail,text);
   }
 
   function isTrueDoner(name){
     const n=String(name||'').toLowerCase();
     return (n.includes('донер')||n.includes('doner'))
       && !n.includes('батон') && !n.includes('baton')
+      && !n.includes('комбо') && !n.includes('combo') && !n.includes('go!');
+  }
+  function isBaton(name){
+    const n=String(name||'').toLowerCase();
+    return (n.includes('батон')||n.includes('baton'))
       && !n.includes('комбо') && !n.includes('combo') && !n.includes('go!');
   }
   function meatOf(name){
@@ -158,41 +164,59 @@
   }
 
   function renderDonerMix(){
-    const items=products().filter(p=>isTrueDoner(p.name));
-    if(!items.length) return;
+    const all=products();
+    const meatItems=all.filter(p=>isTrueDoner(p.name)||isBaton(p.name));
+    const sizeItems=all.filter(p=>isTrueDoner(p.name));
+    if(!meatItems.length && !sizeItems.length) return;
+
     const meats={chicken:{revenue:0,qty:0},beef:{revenue:0,qty:0},assorti:{revenue:0,qty:0},other:{revenue:0,qty:0}};
     const sizes={mini:{label:'Мини',revenue:0,qty:0},standard:{label:'Стандарт',revenue:0,qty:0},onehalf:{label:'1.5',revenue:0,qty:0},double:{label:'Двойной',revenue:0,qty:0}};
-    for(const p of items){
-      const revenue=Number(p.revenue||0),qty=Number(p.quantity||0);
-      const m=meatOf(p.name),s=sizeOf(p.name);
-      meats[m].revenue+=revenue;meats[m].qty+=qty;sizes[s].revenue+=revenue;sizes[s].qty+=qty;
+
+    for(const p of meatItems){
+      const revenue=Number(p.revenue||0),qty=Number(p.quantity||0),m=meatOf(p.name);
+      meats[m].revenue+=revenue;meats[m].qty+=qty;
     }
+    for(const p of sizeItems){
+      const revenue=Number(p.revenue||0),qty=Number(p.quantity||0),s=sizeOf(p.name);
+      sizes[s].revenue+=revenue;sizes[s].qty+=qty;
+    }
+
     const recognized=meats.chicken.revenue+meats.beef.revenue+meats.assorti.revenue;
     const share=v=>recognized?v/recognized*100:0;
     const targets=[['chicken','chickenRevenue','chickenMeta'],['beef','beefRevenue','beefMeta'],['assorti','assortiRevenue','assortiMeta']];
     for(const [key,valueId,metaId] of targets){
-      const value=document.getElementById(valueId),meta=document.getElementById(metaId),bucket=meats[key];
-      if(value)value.textContent=rub(bucket.revenue);
-      if(meta)meta.textContent=`${nf.format(bucket.qty)} шт. · ${nf.format(share(bucket.revenue))}%`;
+      const bucket=meats[key];
+      setText(document.getElementById(valueId),rub(bucket.revenue));
+      setText(document.getElementById(metaId),`${nf.format(bucket.qty)} шт. · ${nf.format(share(bucket.revenue))}%`);
     }
+
     const note=document.getElementById('meatNote');
-    if(note) note.textContent=meats.other.revenue>0
-      ? `В блоке только донеры. Батоны и комбо исключены. Не удалось определить мясо у части донеров: ${rub(meats.other.revenue)}.`
-      : 'В блоке только донеры. Батоны и комбо исключены.';
+    const batonCount=meatItems.filter(p=>isBaton(p.name)).reduce((s,p)=>s+Number(p.quantity||0),0);
+    const baseNote=`Мясо считается по донерам и батонам. Комбо исключены. Батонов в выбранном периоде: ${nf.format(batonCount)} шт.`;
+    setText(note,meats.other.revenue>0
+      ? `${baseNote} Не удалось определить мясо у части позиций: ${rub(meats.other.revenue)}.`
+      : baseNote);
+
     const sizeList=document.getElementById('donerSizeList');
     if(sizeList){
       const max=Math.max(...Object.values(sizes).map(x=>x.revenue),1);
-      sizeList.innerHTML=Object.values(sizes).map(x=>`<div class="size-row"><b>${x.label}</b><div class="size-track"><div class="size-fill" style="width:${Math.max(x.revenue?3:0,x.revenue/max*100)}%"></div></div><span>${nf.format(x.qty)} шт. · ${rub(x.revenue)}</span></div>`).join('');
+      const html=Object.values(sizes).map(x=>`<div class="size-row"><b>${x.label}</b><div class="size-track"><div class="size-fill" style="width:${Math.max(x.revenue?3:0,x.revenue/max*100)}%"></div></div><span>${nf.format(x.qty)} шт. · ${rub(x.revenue)}</span></div>`).join('');
+      if(sizeList.innerHTML!==html) sizeList.innerHTML=html;
     }
   }
 
   function clarifyDonerBlock(){
     const head=document.getElementById('donerMixHead');
-    const note=head?.querySelector('.muted');
-    if(note) note.textContent='Только донеры. Батоны и комбо сюда не входят.';
-    const sizePanel=document.getElementById('donerMixBlock')?.querySelectorAll('.panel')?.[1];
-    const sizeSub=sizePanel?.querySelector('.muted');
-    if(sizeSub) sizeSub.textContent='Мини · Стандарт · 1.5 · Двойной · только донеры, без батонов';
+    setText(head?.querySelector('h2'),'Мясо и размеры');
+    setText(head?.querySelector('.muted'),'Мясо — донеры + батоны; размеры — только донеры. Комбо не учитываются.');
+
+    const panels=document.getElementById('donerMixBlock')?.querySelectorAll('.panel');
+    const meatPanel=panels?.[0];
+    const sizePanel=panels?.[1];
+    setText(meatPanel?.querySelector('h3'),'Мясо: донеры + батоны');
+    setText(meatPanel?.querySelector('.muted'),'Курица / говядина / ассорти по донерам и батонам');
+    setText(sizePanel?.querySelector('h3'),'Размеры донеров');
+    setText(sizePanel?.querySelector('.muted'),'Мини · Стандарт · 1.5 · Двойной · батоны сюда не входят');
   }
 
   function enforce(){
