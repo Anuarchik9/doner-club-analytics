@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Doner Club">
+  <defs><clipPath id="r"><rect width="320" height="320" rx="56" ry="56"/></clipPath></defs>
+  <g clip-path="url(#r)"><rect width="320" height="320" fill="#f75b24"/><g fill="#fff" font-family="Arial Black, Arial, sans-serif" font-weight="900" text-anchor="middle"><text x="160" y="133" font-size="74">DONER</text><text x="160" y="214" font-size="82">CLUB</text><text x="238" y="165" font-size="20" text-anchor="start">shaurma</text><text x="238" y="187" font-size="20" text-anchor="start">house</text></g></g>
+</svg>
