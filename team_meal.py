@@ -1,7 +1,14 @@
 import sales_channel
 
 
-TEAM_MEAL_TOKENS = ("депозит", "deposit")
+TEAM_MEAL_TOKENS = (
+    "депозит",
+    "deposit",
+    "питание упр",
+    "питание: упр",
+    "питание - упр",
+    "питание-упр",
+)
 
 
 def _team_meal_text(row):
