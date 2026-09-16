@@ -24,9 +24,11 @@ def post_worker_init(worker):
     from period_notes import install_period_notes
     from ui_upgrade import install_ui_upgrade
     from trend_label_patch import install_trend_label_patch
+    from compact_layout import install_compact_layout
 
     install_auth(worker.wsgi)
     # The first registered after-request extension is injected last into the HTML.
+    install_compact_layout(worker.wsgi)
     install_trend_label_patch(worker.wsgi)
     install_ui_upgrade(worker.wsgi)
     install_trend_features(worker.wsgi)
