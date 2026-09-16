@@ -20,10 +20,12 @@ def post_worker_init(worker):
     from chart_hover import install_chart_hover
     from preset_controls import install_preset_controls
     from dashboard_polish import install_dashboard_polish
+    from period_notes import install_period_notes
 
     install_auth(worker.wsgi)
     # Register trend first so its injected script is placed last and can coordinate all dashboard patches.
     install_trend_features(worker.wsgi)
+    install_period_notes(worker.wsgi)
     install_dashboard_polish(worker.wsgi)
     install_management_features(worker.wsgi)
     install_economics_features(worker.wsgi)
