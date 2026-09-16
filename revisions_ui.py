@@ -17,7 +17,7 @@ def install_revisions_ui(app):
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
                 tags = (
-                    '<script src="/static/revision-details.js?v=20260916-1"></script>'
+                    '<script src="/static/revision-details.js?v=20260916-2"></script>'
                     '<script src="/static/revisions-ui.js?v=20260916-6"></script>'
                 )
                 if "/static/revision-details.js" not in body and "</body>" in body:
