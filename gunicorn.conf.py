@@ -35,6 +35,7 @@ def post_worker_init(worker):
     from wide_period_click import install_wide_period_click
     from custom_select import install_custom_select
     from mobile_responsive_fix import install_mobile_responsive_fix
+    from multi_point import install_multi_point
 
     # Extend the dashboard allowlist before auth routes start serving requests.
     # Passwords are still validated directly by iikoServer.
@@ -70,6 +71,9 @@ def post_worker_init(worker):
     install_stop_loss(worker.wsgi)
     install_sales_channel(worker.wsgi)
     install_team_meal(worker.wsgi)
+    # Install after team-meal so combined sales-mix requests preserve its
+    # classification patch, then expose the checkbox point selector.
+    install_multi_point(worker.wsgi)
     install_speed_patch(worker.wsgi)
     install_chart_hover(worker.wsgi)
     install_preset_controls(worker.wsgi)
