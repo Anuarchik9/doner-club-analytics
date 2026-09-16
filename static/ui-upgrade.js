@@ -14,6 +14,12 @@
     .dc-table-more{border:1px solid var(--line);background:#101010;color:#ddd;border-radius:999px;padding:9px 18px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
     .dc-table-more:hover{border-color:var(--orange);color:#fff;background:var(--soft)}
 
+    /* Apply the same compact/show-all behaviour to the stop list. */
+    #stopItems.dc-stop-collapsed .stop-item:nth-child(n+13){display:none}
+    .dc-stop-more-wrap{display:flex;justify-content:center;margin-top:13px}
+    .dc-stop-more{border:1px solid var(--line);background:#101010;color:#ddd;border-radius:999px;padding:9px 18px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+    .dc-stop-more:hover{border-color:var(--orange);color:#fff;background:var(--soft)}
+
     /* Values on desktop charts were too small to read at a glance. */
     @media(min-width:901px){
       .dc-trend-value{font-size:13px!important;font-weight:900!important}
@@ -50,7 +56,6 @@
       let c1y = p1.y + (p2.y-p0.y)/6*tension;
       let c2x = p2.x - (p3.x-p1.x)/6*tension;
       let c2y = p2.y - (p3.y-p1.y)/6*tension;
-      // Prevent decorative overshoot above/below the actual segment values.
       const low = Math.min(p1.y,p2.y), high = Math.max(p1.y,p2.y);
       c1y = Math.max(low,Math.min(high,c1y));
       c2y = Math.max(low,Math.min(high,c2y));
@@ -120,5 +125,43 @@
     search?.addEventListener('input',sync);
     new MutationObserver(sync).observe(tbody,{childList:true});
     sync();
+  }
+
+  function installStopMore(){
+    const stopItems = document.getElementById('stopItems');
+    if (!stopItems || document.getElementById('stopListMore')) return false;
+    stopItems.classList.add('dc-stop-collapsed');
+    const wrap = document.createElement('div');
+    wrap.className = 'dc-stop-more-wrap';
+    wrap.id = 'stopListMoreWrap';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'stopListMore';
+    button.className = 'dc-stop-more';
+    wrap.appendChild(button);
+    stopItems.insertAdjacentElement('afterend',wrap);
+
+    const sync = () => {
+      const count = stopItems.querySelectorAll(':scope > .stop-item').length;
+      wrap.style.display = count > 12 ? 'flex' : 'none';
+      button.textContent = stopItems.classList.contains('dc-stop-collapsed') ? `Посмотреть все (${count})` : 'Свернуть';
+    };
+    button.addEventListener('click',()=>{
+      stopItems.classList.toggle('dc-stop-collapsed');
+      sync();
+      if (stopItems.classList.contains('dc-stop-collapsed')) {
+        stopItems.closest('.panel')?.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+    });
+    new MutationObserver(sync).observe(stopItems,{childList:true});
+    sync();
+    return true;
+  }
+
+  if(!installStopMore()){
+    const stopWatcher = new MutationObserver(()=>{
+      if(installStopMore()) stopWatcher.disconnect();
+    });
+    stopWatcher.observe(document.body,{childList:true,subtree:true});
   }
 })();
