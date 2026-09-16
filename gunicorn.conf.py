@@ -28,10 +28,10 @@ def post_worker_init(worker):
     from report_final_polish import install_report_final_polish
     from navigation_shell import install_navigation_shell
     from revisions_ui import install_revisions_ui
-    from revisions_data_v6 import install_revisions_data_v6
+    from revisions_data_v7 import install_revisions_data_v7
 
     install_auth(worker.wsgi)
-    install_revisions_data_v6(worker.wsgi)
+    install_revisions_data_v7(worker.wsgi)
     # The first registered after-request extension is injected last into the HTML.
     install_revisions_ui(worker.wsgi)
     install_navigation_shell(worker.wsgi)
