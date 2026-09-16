@@ -20,6 +20,7 @@ TOKEN_TTL_SECONDS = 50 * 60
 PRODUCTS_TTL_SECONDS = 6 * 60 * 60
 DEPARTMENTS_TTL_SECONDS = 10 * 60
 ANALYTICS_TTL_SECONDS = 5 * 60
+OLAP_TTL_SECONDS = 5 * 60
 DETAIL_WORKERS = max(2, min(int(os.environ.get("IIKO_DETAIL_WORKERS", "8")), 12))
 MAX_ANALYTICS_DAYS = 62
 
@@ -27,11 +28,13 @@ _token_cache = {"value": None, "expires_at": 0.0}
 _products_cache = {"value": None, "last_good": None, "expires_at": 0.0}
 _departments_cache = {"value": None, "expires_at": 0.0}
 _analytics_cache = {}
+_olap_cache = {}
 
 _token_lock = threading.Lock()
 _products_lock = threading.Lock()
 _departments_lock = threading.Lock()
 _analytics_lock = threading.Lock()
+_olap_lock = threading.Lock()
 
 
 def _cache_valid(cache):
@@ -41,24 +44,17 @@ def _cache_valid(cache):
 def get_iiko_token(force_refresh=False):
     if not force_refresh and _cache_valid(_token_cache):
         return _token_cache["value"]
-
     with _token_lock:
         if not force_refresh and _cache_valid(_token_cache):
             return _token_cache["value"]
-
         app_id = os.environ.get("IIKO_APP_ID")
         client_secret = os.environ.get("IIKO_CLIENT_SECRET")
         api_key = os.environ.get("IIKO_API_KEY")
         if not all([app_id, client_secret, api_key]):
             raise RuntimeError("iikoCloud credentials are not configured")
-
         response = requests.post(
             f"{IIKO_BASE_URL}/api/v2/access_token",
-            json={
-                "appId": app_id,
-                "clientSecret": client_secret,
-                "apiKey": api_key,
-            },
+            json={"appId": app_id, "clientSecret": client_secret, "apiKey": api_key},
             timeout=20,
         )
         response.raise_for_status()
@@ -91,11 +87,9 @@ def iiko_post(path, payload, timeout=30, retry_auth=True):
 def get_departments(force_refresh=False):
     if not force_refresh and _cache_valid(_departments_cache):
         return _departments_cache["value"]
-
     with _departments_lock:
         if not force_refresh and _cache_valid(_departments_cache):
             return _departments_cache["value"]
-
         response = iiko_post("/api/inventory/v1/organizations/tree", {}, timeout=30)
         response.raise_for_status()
         tree = response.json()
@@ -126,19 +120,16 @@ def get_departments(force_refresh=False):
 def find_department(point):
     point_normalized = point.strip().lower()
     departments = get_departments()
-
     for department in departments:
         code = (department.get("code") or "").strip().lower()
         name = (department.get("name") or "").strip().lower()
         if code == point_normalized or name == point_normalized:
             return department, departments
-
     for department in departments:
         code = (department.get("code") or "").strip().lower()
         name = (department.get("name") or "").strip().lower()
         if point_normalized in code or point_normalized in name:
             return department, departments
-
     return None, departments
 
 
@@ -165,11 +156,9 @@ def get_sales_document(organization_id, document_id):
 def get_products_map(force_refresh=False):
     if not force_refresh and _cache_valid(_products_cache):
         return _products_cache["value"]
-
     with _products_lock:
         if not force_refresh and _cache_valid(_products_cache):
             return _products_cache["value"]
-
         last_error = None
         for attempt in range(3):
             try:
@@ -202,7 +191,6 @@ def get_products_map(force_refresh=False):
                         break
                     if len(items) < limit:
                         break
-
                 _products_cache["value"] = products
                 _products_cache["last_good"] = products
                 _products_cache["expires_at"] = time.time() + PRODUCTS_TTL_SECONDS
@@ -211,7 +199,6 @@ def get_products_map(force_refresh=False):
                 last_error = error
                 if attempt < 2:
                     time.sleep(1.2 * (attempt + 1))
-
         if _products_cache.get("last_good"):
             return _products_cache["last_good"]
         raise last_error
@@ -284,7 +271,6 @@ def fetch_document_details_parallel(organization_id, processed_documents):
     jobs = [d.get("documentId") for d in processed_documents if d.get("documentId")]
     if not jobs:
         return details, document_errors
-
     workers = min(DETAIL_WORKERS, len(jobs))
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="iiko-detail") as executor:
         future_to_id = {
@@ -329,10 +315,7 @@ def _analytics_cache_set(key, value):
             "expires_at": time.time() + ANALYTICS_TTL_SECONDS,
         }
         if len(_analytics_cache) > 40:
-            oldest_keys = sorted(
-                _analytics_cache,
-                key=lambda k: _analytics_cache[k]["expires_at"],
-            )[:10]
+            oldest_keys = sorted(_analytics_cache, key=lambda k: _analytics_cache[k]["expires_at"])[:10]
             for old_key in oldest_keys:
                 _analytics_cache.pop(old_key, None)
 
@@ -400,7 +383,6 @@ def build_analytics(point, date_from, date_to):
             }
         daily[day]["revenue"] += float(document.get("sum") or 0)
         daily[day]["documentsCount"] += 1
-
         detail = details_by_id.get(document_id)
         if not detail:
             continue
@@ -464,9 +446,7 @@ def build_analytics(point, date_from, date_to):
             "itemsRevenue": revenue_from_items,
             "itemsQuantity": total_quantity,
             "uniqueProducts": len(products),
-            "averageDailyRevenue": (
-                round(revenue_from_documents / days_count, 2) if days_count else 0
-            ),
+            "averageDailyRevenue": round(revenue_from_documents / days_count, 2) if days_count else 0,
         },
         "daily": daily_series,
         "topByRevenue": by_revenue[:20],
@@ -555,9 +535,22 @@ def iiko_server_departments(base_url, token):
     return result
 
 
+def find_iiko_server_department(point, departments):
+    normalized = (point or "").strip().lower()
+    for department in departments:
+        code = (department.get("code") or "").strip().lower()
+        name = (department.get("name") or "").strip().lower()
+        if code == normalized or name == normalized:
+            return department
+    for department in departments:
+        code = (department.get("code") or "").strip().lower()
+        name = (department.get("name") or "").strip().lower()
+        if normalized and (normalized in code or normalized in name):
+            return department
+    return None
+
+
 def run_iiko_server_olap(base_url, token, date_from, date_to, department_id=None):
-    # OpenDate.Typed is a DATE field in iikoServer. Passing 23:59:59 causes
-    # HTTP 409 on some iikoServer versions, so use date-only boundaries.
     filters = {
         "OpenDate.Typed": {
             "filterType": "DateRange",
@@ -577,7 +570,6 @@ def run_iiko_server_olap(base_url, token, date_from, date_to, department_id=None
             "filterType": "IncludeValues",
             "values": [department_id],
         }
-
     body = {
         "reportType": "SALES",
         "buildSummary": False,
@@ -602,6 +594,138 @@ def run_iiko_server_olap(base_url, token, date_from, date_to, department_id=None
     return response.json()
 
 
+def _olap_cache_get(key):
+    with _olap_lock:
+        cached = _olap_cache.get(key)
+        if not cached:
+            return None
+        if cached["expires_at"] <= time.time():
+            _olap_cache.pop(key, None)
+            return None
+        return cached["value"]
+
+
+def _olap_cache_set(key, value):
+    with _olap_lock:
+        _olap_cache[key] = {
+            "value": value,
+            "expires_at": time.time() + OLAP_TTL_SECONDS,
+        }
+        if len(_olap_cache) > 60:
+            oldest = sorted(_olap_cache, key=lambda k: _olap_cache[k]["expires_at"])[:15]
+            for key_to_remove in oldest:
+                _olap_cache.pop(key_to_remove, None)
+
+
+def aggregate_olap_rows(rows, date_from, date_to):
+    days_count = len(date_range(date_from, date_to))
+    total_checks = 0.0
+    total_revenue = 0.0
+    total_guests = 0.0
+    hourly = [
+        {"hour": hour, "label": f"{hour:02d}:00", "checks": 0.0, "revenue": 0.0, "guests": 0.0}
+        for hour in range(24)
+    ]
+
+    for row in rows:
+        checks = float(row.get("UniqOrderId") or 0)
+        revenue = float(row.get("DishDiscountSumInt") or 0)
+        guests = float(row.get("GuestNum") or 0)
+        total_checks += checks
+        total_revenue += revenue
+        total_guests += guests
+
+        close_time = row.get("CloseTime")
+        if close_time:
+            try:
+                hour = datetime.fromisoformat(str(close_time).replace("Z", "+00:00")).hour
+                hourly[hour]["checks"] += checks
+                hourly[hour]["revenue"] += revenue
+                hourly[hour]["guests"] += guests
+            except (ValueError, TypeError):
+                pass
+
+    max_hour_revenue = max((item["revenue"] for item in hourly), default=0) or 1
+    for item in hourly:
+        item["checks"] = round(item["checks"], 3)
+        item["revenue"] = round(item["revenue"], 2)
+        item["guests"] = round(item["guests"], 3)
+        item["averageCheck"] = round(item["revenue"] / item["checks"], 2) if item["checks"] else 0
+        item["averageRevenuePerDay"] = round(item["revenue"] / days_count, 2) if days_count else 0
+        item["intensity"] = round(item["revenue"] / max_hour_revenue, 4) if max_hour_revenue else 0
+
+    active_hours = [item for item in hourly if item["checks"] > 0]
+    peak = max(active_hours, key=lambda item: item["revenue"], default=None)
+    weak = min(active_hours, key=lambda item: item["revenue"], default=None)
+
+    return {
+        "checks": round(total_checks, 3),
+        "revenue": round(total_revenue, 2),
+        "guests": round(total_guests, 3),
+        "averageCheck": round(total_revenue / total_checks, 2) if total_checks else 0,
+        "averageGuestsPerCheck": round(total_guests / total_checks, 2) if total_checks else 0,
+        "daysCount": days_count,
+        "hourly": hourly,
+        "peakHour": peak,
+        "weakHour": weak,
+    }
+
+
+def build_receipt_analytics(point, date_from, date_to):
+    date_range(date_from, date_to)
+    cache_key = ((point or "").strip().lower(), date_from, date_to)
+    cached = _olap_cache_get(cache_key)
+    if cached is not None:
+        result = dict(cached)
+        result["cache"] = {"hit": True, "ttlSeconds": OLAP_TTL_SECONDS}
+        return result
+
+    base_url = None
+    token = None
+    try:
+        base_url, token = iiko_server_auth()
+        departments = iiko_server_departments(base_url, token)
+        department = find_iiko_server_department(point, departments)
+        if not department:
+            raise ValueError(f"Point '{point}' not found in iikoServer departments")
+        data = run_iiko_server_olap(
+            base_url,
+            token,
+            date_from,
+            date_to,
+            department.get("id"),
+        )
+        rows = data.get("data", []) if isinstance(data, dict) else []
+        metrics = aggregate_olap_rows(rows, date_from, date_to)
+        result = {
+            "success": True,
+            "source": "iikoServer OLAP SALES",
+            "point": {
+                "id": department.get("id"),
+                "code": department.get("code"),
+                "name": department.get("name"),
+            },
+            "period": {"from": date_from, "to": date_to, "daysCount": metrics["daysCount"]},
+            "summary": {
+                "checks": metrics["checks"],
+                "revenue": metrics["revenue"],
+                "guests": metrics["guests"],
+                "averageCheck": metrics["averageCheck"],
+                "averageGuestsPerCheck": metrics["averageGuestsPerCheck"],
+            },
+            "hourly": metrics["hourly"],
+            "peakHour": metrics["peakHour"],
+            "weakHour": metrics["weakHour"],
+            "rows": len(rows),
+            "cache": {"hit": False, "ttlSeconds": OLAP_TTL_SECONDS},
+        }
+        _olap_cache_set(cache_key, result)
+        return result
+    finally:
+        if base_url and token:
+            iiko_server_logout(base_url, token)
+
+
 @app.route("/")
 def home():
     return jsonify({
@@ -611,6 +735,7 @@ def home():
         "examples": {
             "arai_day": "/analytics?point=Arai&date=2026-09-15",
             "arai_period": "/analytics?point=Arai&from=2026-09-01&to=2026-09-15",
+            "receipt_analytics": "/receipt-analytics?point=Arai&date=2026-09-15",
             "departments": "/departments",
             "orders_access_test": "/orders-access-test?point=Arai",
             "olap_access_test": "/olap-access-test?date=2026-09-15",
@@ -624,10 +749,11 @@ def departments():
     try:
         return jsonify({"success": True, "departments": get_departments()})
     except requests.HTTPError as error:
+        response = error.response
         return jsonify({
             "success": False,
-            "statusCode": error.response.status_code,
-            "details": error.response.text,
+            "statusCode": response.status_code if response is not None else None,
+            "details": response.text[:1200] if response is not None else str(error),
         }), 500
     except Exception as error:
         return jsonify({"success": False, "message": str(error)}), 500
@@ -640,7 +766,6 @@ def orders_access_test():
         default_date = (datetime.now(LOCAL_TZ).date() - timedelta(days=1)).isoformat()
         date_from = request.args.get("from") or request.args.get("date") or default_date
         date_to = request.args.get("to") or date_from
-
         department, available_departments = find_department(point)
         if not department:
             return jsonify({
@@ -651,14 +776,12 @@ def orders_access_test():
                     for d in available_departments
                 ],
             }), 404
-
         organization_id = department["organizationId"]
         response = get_delivery_orders(organization_id, date_from, date_to)
         try:
             data = response.json()
         except Exception:
             data = {"raw": response.text[:4000]}
-
         if not response.ok:
             return jsonify({
                 "success": False,
@@ -674,7 +797,6 @@ def orders_access_test():
                 "period": {"from": date_from, "to": date_to},
                 "details": data,
             }), response.status_code
-
         orders = flatten_orders_response(data)
         sums = [float(o.get("sum") or 0) for o in orders]
         closed = [o for o in orders if o.get("whenClosed")]
@@ -740,22 +862,11 @@ def olap_access_test():
         date_to = request.args.get("to") or date_from
         department_id = request.args.get("departmentId") or None
         date_range(date_from, date_to)
-
         base_url, token = iiko_server_auth()
         data = run_iiko_server_olap(base_url, token, date_from, date_to, department_id)
         rows = data.get("data", []) if isinstance(data, dict) else []
-
-        total_checks = 0.0
-        total_revenue = 0.0
-        total_guests = 0.0
-        department_ids = set()
-        for row in rows:
-            total_checks += float(row.get("UniqOrderId") or 0)
-            total_revenue += float(row.get("DishDiscountSumInt") or 0)
-            total_guests += float(row.get("GuestNum") or 0)
-            if row.get("Department.Id"):
-                department_ids.add(row.get("Department.Id"))
-
+        metrics = aggregate_olap_rows(rows, date_from, date_to)
+        department_ids = sorted({row.get("Department.Id") for row in rows if row.get("Department.Id")})
         return jsonify({
             "success": True,
             "access": True,
@@ -763,14 +874,12 @@ def olap_access_test():
             "period": {"from": date_from, "to": date_to},
             "departmentFilter": department_id,
             "rows": len(rows),
-            "departmentIds": sorted(department_ids),
+            "departmentIds": department_ids,
             "totals": {
-                "checks": round(total_checks, 3),
-                "revenue": round(total_revenue, 2),
-                "guests": round(total_guests, 3),
-                "averageCheck": (
-                    round(total_revenue / total_checks, 2) if total_checks else 0
-                ),
+                "checks": metrics["checks"],
+                "revenue": metrics["revenue"],
+                "guests": metrics["guests"],
+                "averageCheck": metrics["averageCheck"],
             },
             "sample": rows[:10],
         })
@@ -790,6 +899,42 @@ def olap_access_test():
             iiko_server_logout(base_url, token)
 
 
+@app.route("/receipt-analytics")
+def receipt_analytics():
+    try:
+        point = request.args.get("point", "Arai").strip()
+        single_date = request.args.get("date")
+        date_from = request.args.get("from")
+        date_to = request.args.get("to")
+        if single_date:
+            date_from = single_date
+            date_to = single_date
+        if not date_from:
+            date_from = (datetime.now(LOCAL_TZ).date() - timedelta(days=1)).isoformat()
+        if not date_to:
+            date_to = date_from
+        return jsonify(build_receipt_analytics(point, date_from, date_to))
+    except ValueError as error:
+        return jsonify({"success": False, "code": "INVALID_PERIOD_OR_POINT", "message": str(error)}), 400
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "code": "OLAP_TIMEOUT",
+            "message": "iikoServer did not answer in time. Please retry the request.",
+        }), 504
+    except requests.HTTPError as error:
+        response = error.response
+        return jsonify({
+            "success": False,
+            "code": "OLAP_HTTP_ERROR",
+            "statusCode": response.status_code if response is not None else None,
+            "message": "iikoServer OLAP request failed",
+            "details": response.text[:1500] if response is not None else str(error),
+        }), 502
+    except Exception as error:
+        return jsonify({"success": False, "code": "OLAP_ERROR", "message": str(error)}), 500
+
+
 @app.route("/analytics")
 def analytics():
     try:
@@ -797,7 +942,6 @@ def analytics():
         single_date = request.args.get("date")
         date_from = request.args.get("from")
         date_to = request.args.get("to")
-
         if single_date:
             date_from = single_date
             date_to = single_date
@@ -805,7 +949,6 @@ def analytics():
             date_from = datetime.now(LOCAL_TZ).date().isoformat()
         if not date_to:
             date_to = date_from
-
         payload, error_payload, status = build_analytics(point, date_from, date_to)
         if error_payload:
             return jsonify(error_payload), status
