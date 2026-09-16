@@ -14,6 +14,7 @@ def post_worker_init(worker):
     from economics_features import install_economics_features
     from stop_loss import install_stop_loss
     from trend_features import install_trend_features
+    from cashier_features import install_cashier_features
     from sales_channel import install_sales_channel
     from team_meal import install_team_meal
     from speed_patch import install_speed_patch
@@ -21,13 +22,16 @@ def post_worker_init(worker):
     from preset_controls import install_preset_controls
     from dashboard_polish import install_dashboard_polish
     from period_notes import install_period_notes
+    from ui_upgrade import install_ui_upgrade
 
     install_auth(worker.wsgi)
-    # Register trend first so its injected script is placed last and can coordinate all dashboard patches.
+    # First registered after-request extensions are injected last into the HTML.
+    install_ui_upgrade(worker.wsgi)
     install_trend_features(worker.wsgi)
     install_period_notes(worker.wsgi)
     install_dashboard_polish(worker.wsgi)
     install_management_features(worker.wsgi)
+    install_cashier_features(worker.wsgi)
     install_economics_features(worker.wsgi)
     install_stop_loss(worker.wsgi)
     install_sales_channel(worker.wsgi)
