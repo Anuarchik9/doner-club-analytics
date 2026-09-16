@@ -15,10 +15,19 @@ SCOPES = {
     },
     "workshop": {
         "label": "Цех",
-        "store_needles": ("цех основной",),
+        "store_needles": ("цех",),
         "store_excludes": (),
     },
 }
+
+INVENTORY_MARKERS = (
+    "invtr",
+    "inventory",
+    "invent",
+    "reconciliation",
+    "инвентар",
+    "ревиз",
+)
 
 
 def _settings():
@@ -75,8 +84,14 @@ def _field_map(payload):
             continue
         useful = {
             key: value for key, value in candidate.items()
-            if isinstance(key, str) and isinstance(value, dict)
-            and ("groupingAllowed" in value or "aggregationAllowed" in value or "filteringAllowed" in value or "type" in value)
+            if isinstance(key, str)
+            and isinstance(value, dict)
+            and (
+                "groupingAllowed" in value
+                or "aggregationAllowed" in value
+                or "filteringAllowed" in value
+                or "type" in value
+            )
         }
         if useful:
             return useful
@@ -87,8 +102,7 @@ def _allowed(field_map, name, capability):
     info = field_map.get(name)
     if not info:
         return False
-    value = info.get(capability)
-    return value is not False
+    return info.get(capability) is not False
 
 
 def _num(value):
@@ -122,39 +136,117 @@ def _pick(available, *names):
     return None
 
 
-def _query_transactions(base_url, token, period):
-    columns_response = requests.get(
+def _pick_like(available, includes, excludes=()):
+    for name in sorted(available):
+        low = name.lower()
+        if all(part in low for part in includes) and not any(part in low for part in excludes):
+            return name
+    return None
+
+
+def _inventory_label(value):
+    text = str(value or "").strip().lower()
+    return bool(text) and any(marker in text for marker in INVENTORY_MARKERS)
+
+
+def _date_filter(date_field, period):
+    date_from, date_to = _month_bounds(period)
+    return {
+        date_field: {
+            "filterType": "DateRange",
+            "periodType": "CUSTOM",
+            "from": date_from,
+            "to": date_to,
+            "includeLow": True,
+            "includeHigh": False,
+        }
+    }
+
+
+def _olap_post(base_url, token, body, timeout=75):
+    response = requests.post(
+        f"{base_url}/api/v2/reports/olap",
+        params={"key": token},
+        json=body,
+        timeout=timeout,
+    )
+    if not response.ok:
+        raise RuntimeError(f"TRANSACTIONS OLAP HTTP {response.status_code}: {response.text[:700]}")
+    data = response.json()
+    rows = data.get("data", data if isinstance(data, list) else [])
+    return rows if isinstance(rows, list) else []
+
+
+def _get_transaction_fields(base_url, token):
+    response = requests.get(
         f"{base_url}/api/v2/reports/olap/columns",
         params={"key": token, "reportType": "TRANSACTIONS"},
         timeout=30,
     )
-    columns_response.raise_for_status()
-    columns_payload = columns_response.json()
-    fields = _field_map(columns_payload)
+    response.raise_for_status()
+    fields = _field_map(response.json())
+    if not fields:
+        raise RuntimeError("iikoServer не вернул список полей TRANSACTIONS OLAP")
+    return fields
+
+
+def _resolve_fields(fields):
     available = set(fields)
 
-    date_field = _pick(available, "DateTime.DateTyped", "DateSecondary.DateTyped")
-    tx_field = _pick(available, "TransactionType", "TransactionType.Code")
-    store_field = _pick(available, "Store", "Account.StoreOrAccount")
-    product_field = _pick(available, "Product.Name", "Contr-Product.Name")
-    product_id_field = _pick(available, "Product.Id", "Contr-Product.Id")
-    unit_field = _pick(available, "Product.MeasureUnit", "Contr-Product.MeasureUnit")
-    document_field = _pick(available, "Document")
+    date_field = _pick(
+        available,
+        "DateTime.DateTyped",
+        "DateSecondary.DateTyped",
+    ) or _pick_like(available, ("date", "typed"))
 
-    required = {
-        "date": date_field,
-        "transaction": tx_field,
-        "store": store_field,
-        "product": product_field,
-    }
-    missing = [label for label, field in required.items() if not field]
-    if missing:
-        raise RuntimeError("В TRANSACTIONS OLAP не найдены обязательные поля: " + ", ".join(missing))
+    tx_field = _pick(
+        available,
+        "TransactionType.Code",
+        "TransactionType",
+        "TransactionType.Name",
+    ) or _pick_like(available, ("transactiontype",))
 
-    group_fields = []
-    for field in (date_field, tx_field, store_field, document_field, product_field, product_id_field, unit_field):
-        if field and field not in group_fields and _allowed(fields, field, "groupingAllowed"):
-            group_fields.append(field)
+    store_candidates = []
+    for name in (
+        "Store",
+        "Store.Name",
+        "Account.StoreOrAccount",
+        "Account.StoreOrAccount.Name",
+        "Store.Id",
+    ):
+        if name in available and _allowed(fields, name, "groupingAllowed") and name not in store_candidates:
+            store_candidates.append(name)
+    for name in sorted(available):
+        low = name.lower()
+        if "store" in low and _allowed(fields, name, "groupingAllowed") and name not in store_candidates:
+            store_candidates.append(name)
+        if len(store_candidates) >= 3:
+            break
+
+    document_field = _pick(
+        available,
+        "Document",
+        "Document.Number",
+        "Document.Num",
+    ) or _pick_like(available, ("document",), ("date",))
+
+    product_field = _pick(
+        available,
+        "Product.Name",
+        "Contr-Product.Name",
+    ) or _pick_like(available, ("product", "name"))
+
+    product_id_field = _pick(
+        available,
+        "Product.Id",
+        "Contr-Product.Id",
+    ) or _pick_like(available, ("product", "id"))
+
+    unit_field = _pick(
+        available,
+        "Product.MeasureUnit",
+        "Contr-Product.MeasureUnit",
+    ) or _pick_like(available, ("product", "measure"))
 
     aggregate_candidates = (
         "Amount.In",
@@ -166,61 +258,28 @@ def _query_transactions(base_url, token, period):
         "Contr-Amount",
     )
     aggregate_fields = [
-        field for field in aggregate_candidates
-        if field in available and _allowed(fields, field, "aggregationAllowed")
+        name for name in aggregate_candidates
+        if name in available and _allowed(fields, name, "aggregationAllowed")
     ]
+
+    missing = []
+    if not date_field:
+        missing.append("date")
+    if not tx_field:
+        missing.append("transaction type")
+    if not store_candidates:
+        missing.append("store")
+    if not product_field:
+        missing.append("product")
     if not aggregate_fields:
-        raise RuntimeError("В TRANSACTIONS OLAP не найдены поля количества/суммы для расчёта ревизии")
+        missing.append("amount/sum")
+    if missing:
+        raise RuntimeError("В TRANSACTIONS OLAP не найдены обязательные поля: " + ", ".join(missing))
 
-    date_from, date_to = _month_bounds(period)
-    filters = {
-        date_field: {
-            "filterType": "DateRange",
-            "periodType": "CUSTOM",
-            "from": date_from,
-            "to": date_to,
-            "includeLow": True,
-            "includeHigh": False,
-        }
-    }
-    if tx_field and _allowed(fields, tx_field, "filteringAllowed"):
-        filters[tx_field] = {"filterType": "IncludeValues", "values": ["INVTR"]}
-
-    body = {
-        "reportType": "TRANSACTIONS",
-        "buildSummary": False,
-        "groupByRowFields": group_fields,
-        "groupByColFields": [],
-        "aggregateFields": aggregate_fields,
-        "filters": filters,
-    }
-
-    response = requests.post(
-        f"{base_url}/api/v2/reports/olap",
-        params={"key": token},
-        json=body,
-        timeout=75,
-    )
-    if response.status_code >= 400 and tx_field in filters:
-        # Some iikoServer builds reject IncludeValues for TransactionType. Retry with date only,
-        # then keep only inventory-reconciliation transactions in Python.
-        body["filters"] = {date_field: filters[date_field]}
-        response = requests.post(
-            f"{base_url}/api/v2/reports/olap",
-            params={"key": token},
-            json=body,
-            timeout=75,
-        )
-    if not response.ok:
-        raise RuntimeError(f"TRANSACTIONS OLAP HTTP {response.status_code}: {response.text[:700]}")
-    data = response.json()
-    rows = data.get("data", data if isinstance(data, list) else [])
-    if not isinstance(rows, list):
-        rows = []
-    return rows, {
+    return {
         "date": date_field,
         "transaction": tx_field,
-        "store": store_field,
+        "stores": store_candidates,
         "document": document_field,
         "product": product_field,
         "productId": product_id_field,
@@ -229,14 +288,114 @@ def _query_transactions(base_url, token, period):
     }
 
 
-def _build_result(scope_key, period, rows, field_names):
-    tx_field = field_names["transaction"]
-    store_field = field_names["store"]
-    date_field = field_names["date"]
-    document_field = field_names.get("document")
-    product_field = field_names["product"]
-    product_id_field = field_names.get("productId")
-    unit_field = field_names.get("unit")
+def _discover_inventory_values(base_url, token, period, fields, names):
+    group_fields = []
+    for field in [names["transaction"], *names["stores"], names.get("document")]:
+        if field and field not in group_fields and _allowed(fields, field, "groupingAllowed"):
+            group_fields.append(field)
+
+    body = {
+        "reportType": "TRANSACTIONS",
+        "buildSummary": False,
+        "groupByRowFields": group_fields,
+        "groupByColFields": [],
+        "aggregateFields": [names["aggregates"][0]],
+        "filters": _date_filter(names["date"], period),
+    }
+    rows = _olap_post(base_url, token, body, timeout=60)
+
+    tx_values = []
+    all_tx_values = []
+    all_store_values = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        tx = str(row.get(names["transaction"]) or "").strip()
+        if tx and tx not in all_tx_values:
+            all_tx_values.append(tx)
+        if tx and _inventory_label(tx) and tx not in tx_values:
+            tx_values.append(tx)
+        for store_field in names["stores"]:
+            store = str(row.get(store_field) or "").strip()
+            if store and store not in all_store_values:
+                all_store_values.append(store)
+
+    return {
+        "inventoryTransactionValues": tx_values,
+        "transactionValues": all_tx_values[:80],
+        "storeValues": all_store_values[:80],
+        "discoveryRows": len(rows),
+    }
+
+
+def _query_inventory_transactions(base_url, token, period, fields, names, inventory_values):
+    group_fields = []
+    for field in [
+        names["date"],
+        names["transaction"],
+        *names["stores"],
+        names.get("document"),
+        names["product"],
+        names.get("productId"),
+        names.get("unit"),
+    ]:
+        if field and field not in group_fields and _allowed(fields, field, "groupingAllowed"):
+            group_fields.append(field)
+
+    filters = _date_filter(names["date"], period)
+    if inventory_values and _allowed(fields, names["transaction"], "filteringAllowed"):
+        filters[names["transaction"]] = {
+            "filterType": "IncludeValues",
+            "values": inventory_values,
+        }
+
+    body = {
+        "reportType": "TRANSACTIONS",
+        "buildSummary": False,
+        "groupByRowFields": group_fields,
+        "groupByColFields": [],
+        "aggregateFields": names["aggregates"],
+        "filters": filters,
+    }
+
+    try:
+        rows = _olap_post(base_url, token, body, timeout=90)
+    except RuntimeError:
+        if names["transaction"] in filters:
+            body["filters"] = _date_filter(names["date"], period)
+            rows = _olap_post(base_url, token, body, timeout=90)
+        else:
+            raise
+    return rows
+
+
+def _row_inventory(row, tx_field, inventory_values):
+    value = str(row.get(tx_field) or "").strip()
+    if inventory_values:
+        return value in inventory_values
+    return _inventory_label(value)
+
+
+def _row_store(scope_key, row, store_fields):
+    values = []
+    for field in store_fields:
+        value = str(row.get(field) or "").strip()
+        if value:
+            values.append(value)
+    for value in values:
+        if _store_matches(scope_key, value):
+            return value
+    return None
+
+
+def _build_result(scope_key, period, rows, names, diagnostics):
+    tx_field = names["transaction"]
+    date_field = names["date"]
+    document_field = names.get("document")
+    product_field = names["product"]
+    product_id_field = names.get("productId")
+    unit_field = names.get("unit")
+    inventory_values = diagnostics.get("inventoryTransactionValues") or []
 
     revisions = defaultdict(lambda: {"shortage": 0.0, "surplus": 0.0, "stores": set(), "documents": set()})
     products = defaultdict(lambda: {"shortage": 0.0, "surplus": 0.0, "shortageRevisions": set(), "surplusRevisions": set(), "unit": None})
@@ -244,23 +403,20 @@ def _build_result(scope_key, period, rows, field_names):
     matched_stores = set()
 
     for row in rows:
-        if not isinstance(row, dict):
+        if not isinstance(row, dict) or not _row_inventory(row, tx_field, inventory_values):
             continue
-        tx_value = str(row.get(tx_field) or "").upper()
-        if "INVTR" not in tx_value and "ИНВЕНТ" not in tx_value:
-            continue
-        store = row.get(store_field)
-        if not _store_matches(scope_key, store):
+        store = _row_store(scope_key, row, names["stores"])
+        if not store:
             continue
 
         matched_rows += 1
-        matched_stores.add(str(store))
+        matched_stores.add(store)
         date_value = str(row.get(date_field) or "")[:10] or "Без даты"
         document = str(row.get(document_field) or "").strip() if document_field else ""
         revision_key = date_value
         if document:
             revisions[revision_key]["documents"].add(document)
-        revisions[revision_key]["stores"].add(str(store))
+        revisions[revision_key]["stores"].add(store)
 
         product = str(row.get(product_field) or "Позиция без названия").strip()
         product_id = str(row.get(product_id_field) or "").strip() if product_id_field else ""
@@ -320,8 +476,16 @@ def _build_result(scope_key, period, rows, field_names):
             "surplusRevisionCount": len(item["surplusRevisions"]),
         })
 
-    top_shortages = sorted((x for x in product_rows if x["shortage"] > 0), key=lambda x: x["shortage"], reverse=True)[:10]
-    top_surpluses = sorted((x for x in product_rows if x["surplus"] > 0), key=lambda x: x["surplus"], reverse=True)[:10]
+    top_shortages = sorted(
+        (x for x in product_rows if x["shortage"] > 0),
+        key=lambda x: x["shortage"],
+        reverse=True,
+    )[:10]
+    top_surpluses = sorted(
+        (x for x in product_rows if x["surplus"] > 0),
+        key=lambda x: x["surplus"],
+        reverse=True,
+    )[:10]
     recurring = sorted(
         (x for x in product_rows if x["shortageRevisionCount"] >= 2),
         key=lambda x: (x["shortageRevisionCount"], x["shortage"]),
@@ -335,7 +499,7 @@ def _build_result(scope_key, period, rows, field_names):
         "scope": scope_key,
         "scopeLabel": SCOPES[scope_key]["label"],
         "period": period,
-        "source": "iikoServer TRANSACTIONS OLAP / INVTR",
+        "source": "iikoServer TRANSACTIONS OLAP / inventory reconciliation",
         "matchedRows": matched_rows,
         "stores": sorted(matched_stores),
         "summary": {
@@ -350,6 +514,7 @@ def _build_result(scope_key, period, rows, field_names):
         "topSurpluses": top_surpluses,
         "recurringShortages": recurring,
         "discrepancyPercent": None,
+        "diagnostics": diagnostics,
         "note": "Процент расхождения пока не считается: для него нужен полный книжный остаток на момент каждой инвентаризации.",
     }
 
@@ -373,9 +538,19 @@ def install_revisions_data(app):
         base_url = token = None
         try:
             base_url, token = _auth()
-            rows, fields = _query_transactions(base_url, token, period)
-            result = _build_result(scope, period, rows, fields)
-            result["fieldMap"] = fields
+            fields = _get_transaction_fields(base_url, token)
+            names = _resolve_fields(fields)
+            diagnostics = _discover_inventory_values(base_url, token, period, fields, names)
+            rows = _query_inventory_transactions(
+                base_url,
+                token,
+                period,
+                fields,
+                names,
+                diagnostics.get("inventoryTransactionValues") or [],
+            )
+            result = _build_result(scope, period, rows, names, diagnostics)
+            result["fieldMap"] = names
             return jsonify(result)
         except Exception as error:
             return jsonify({
