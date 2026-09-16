@@ -79,5 +79,6 @@
   document.getElementById('from')?.addEventListener('change',()=>setTimeout(syncMonthlyDynamic,150));
   document.getElementById('to')?.addEventListener('change',()=>setTimeout(syncMonthlyDynamic,80));
   document.querySelector('.presets')?.addEventListener('click',()=>setTimeout(syncMonthlyDynamic,80));
+  document.querySelectorAll('.report-mode-btn').forEach(btn=>btn.addEventListener('click',()=>setTimeout(syncMonthlyDynamic,30)));
   setTimeout(refresh,1400);
 })();
