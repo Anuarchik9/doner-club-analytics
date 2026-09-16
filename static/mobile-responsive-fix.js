@@ -2,6 +2,9 @@
   if (window.__dcMobileResponsiveFix) return;
   window.__dcMobileResponsiveFix = true;
 
+  const isRevisions = location.pathname.endsWith('/revisions.html');
+  if (isRevisions) document.documentElement.classList.add('dc-mobile-revisions');
+
   const style = document.createElement('style');
   style.textContent = `
     @media (max-width: 767px) {
@@ -44,6 +47,64 @@
       .top .brand span { display: none !important; }
       .top .logo { width: 40px !important; height: 40px !important; flex-basis: 40px !important; border-radius: 12px !important; }
       .top .live, .source { font-size: 10px !important; padding: 6px 8px !important; white-space: nowrap !important; }
+
+      /* iOS Safari: keep the burger on its own compositor layer and reserve a
+         permanent slot for the revisions logo. This prevents the sticky header
+         and the fixed burger from visually jumping on top of each other while
+         Safari's browser chrome expands/collapses. */
+      .dc-nav-toggle {
+        position: fixed !important;
+        left: 12px !important;
+        right: auto !important;
+        top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+        bottom: auto !important;
+        width: 42px !important;
+        height: 42px !important;
+        margin: 0 !important;
+        transform: translate3d(0,0,0) !important;
+        -webkit-transform: translate3d(0,0,0) !important;
+        -webkit-backface-visibility: hidden !important;
+        backface-visibility: hidden !important;
+        touch-action: manipulation !important;
+        z-index: 10150 !important;
+      }
+      .dc-mobile-revisions .top {
+        position: sticky !important;
+        top: 0 !important;
+        height: 64px !important;
+        padding: 0 12px 0 0 !important;
+        background: #080808 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        transform: none !important;
+        -webkit-transform: none !important;
+        z-index: 100 !important;
+      }
+      .dc-mobile-revisions .top .brand {
+        min-width: 0 !important;
+        padding-left: 64px !important;
+        margin: 0 !important;
+        transform: none !important;
+        -webkit-transform: none !important;
+      }
+      .dc-mobile-revisions .top .logo {
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        top: auto !important;
+        bottom: auto !important;
+        margin: 0 !important;
+        transform: none !important;
+        -webkit-transform: none !important;
+        flex: 0 0 40px !important;
+      }
+      .dc-mobile-revisions .top .source {
+        position: relative !important;
+        margin-left: auto !important;
+        flex: 0 0 auto !important;
+        transform: none !important;
+        -webkit-transform: none !important;
+      }
 
       .hero {
         width: 100% !important;
@@ -228,6 +289,7 @@
 
     @media (max-width: 390px) {
       .wrap { padding-left: 10px !important; padding-right: 10px !important; }
+      .dc-mobile-revisions .top .brand { padding-left: 62px !important; }
       .heat-grid { grid-template-columns: minmax(0,1fr) !important; }
       .dc-brand-badge { font-size: 9px !important; }
     }
