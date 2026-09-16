@@ -9,6 +9,7 @@ import requests
 from flask import jsonify, session
 
 import app as core
+import iiko_cost
 
 
 STATE_FILE = "/tmp/doner-club-stop-state.json"
@@ -75,11 +76,10 @@ def _parse_dt(value):
 def _timestamp_from_node(node):
     if not isinstance(node, dict):
         return None
-    keys = (
+    for key in (
         "stopSince", "since", "startTime", "createdAt", "createTime", "dateAdd",
         "addedAt", "dateFrom", "timestamp", "creationTime",
-    )
-    for key in keys:
+    ):
         parsed = _parse_dt(node.get(key))
         if parsed:
             return parsed
@@ -114,9 +114,6 @@ def _flatten_stop_items(payload):
                 walk(child, terminal_group_id, inherited_time)
 
     walk(payload)
-
-    # One menu position can be present for several terminal groups. For the point-level
-    # dashboard it is enough to show it once. A zero/negative balance wins over a positive one.
     by_product = {}
     for item in found:
         pid = item["productId"]
@@ -143,7 +140,7 @@ def _current_stop_list(organization_id):
 
 def _iiko_server_history(point, product_ids, start_date, end_date):
     if not product_ids:
-        return []
+        return [], None
     base_url = None
     token = None
     try:
@@ -151,7 +148,14 @@ def _iiko_server_history(point, product_ids, start_date, end_date):
         departments = core.iiko_server_departments(base_url, token)
         department = core.find_iiko_server_department(point, departments)
         if not department:
-            return []
+            return [], None
+
+        cost_field = None
+        try:
+            cost_field, _ = iiko_cost.discover_cost_field(base_url, token)
+        except Exception:
+            cost_field = None
+
         filters = {
             "OpenDate.Typed": {
                 "filterType": "DateRange",
@@ -161,25 +165,19 @@ def _iiko_server_history(point, product_ids, start_date, end_date):
                 "includeLow": True,
                 "includeHigh": True,
             },
-            "OrderDeleted": {
-                "filterType": "IncludeValues",
-                "values": ["NOT_DELETED"],
-            },
-            "Department.Id": {
-                "filterType": "IncludeValues",
-                "values": [department.get("id")],
-            },
-            "DishId": {
-                "filterType": "IncludeValues",
-                "values": list(product_ids),
-            },
+            "OrderDeleted": {"filterType": "IncludeValues", "values": ["NOT_DELETED"]},
+            "Department.Id": {"filterType": "IncludeValues", "values": [department.get("id")]},
+            "DishId": {"filterType": "IncludeValues", "values": list(product_ids)},
         }
+        aggregate_fields = ["DishAmountInt", "DishDiscountSumInt"]
+        if cost_field:
+            aggregate_fields.append(cost_field)
         body = {
             "reportType": "SALES",
             "buildSummary": False,
             "groupByRowFields": ["CloseTime", "DishId", "DishName"],
             "groupByColFields": [],
-            "aggregateFields": ["DishAmountInt", "DishDiscountSumInt", "Cost"],
+            "aggregateFields": aggregate_fields,
             "filters": filters,
         }
         response = requests.post(
@@ -191,13 +189,13 @@ def _iiko_server_history(point, product_ids, start_date, end_date):
         )
         response.raise_for_status()
         payload = response.json()
-        return payload.get("data", []) if isinstance(payload, dict) else []
+        return (payload.get("data", []) if isinstance(payload, dict) else []), cost_field
     finally:
         if base_url and token:
             core.iiko_server_logout(base_url, token)
 
 
-def _history_stats(rows, history_start, history_end):
+def _history_stats(rows, history_start, history_end, cost_field=None):
     qty_by_slot = defaultdict(float)
     totals = defaultdict(lambda: {"qty": 0.0, "revenue": 0.0, "cost": 0.0, "name": None})
     start = datetime.strptime(history_start, "%Y-%m-%d").date()
@@ -215,7 +213,7 @@ def _history_stats(rows, history_start, history_end):
         close_time = _parse_dt(row.get("CloseTime"))
         qty = float(row.get("DishAmountInt") or 0)
         revenue = float(row.get("DishDiscountSumInt") or 0)
-        cost = float(row.get("Cost") or 0)
+        cost = iiko_cost.cost_value(row, cost_field) if cost_field else 0.0
         if close_time:
             qty_by_slot[(pid, close_time.weekday(), close_time.hour)] += qty
         item = totals[pid]
@@ -253,13 +251,11 @@ def build_stop_loss(point):
         result["cache"] = {"hit": True, "ttlSeconds": STOP_TTL_SECONDS}
         return result
 
-    department, available = core.find_department(point)
+    department, _ = core.find_department(point)
     if not department:
         raise ValueError(f"Point '{point}' not found")
     organization_id = department.get("organizationId")
     raw_items = _current_stop_list(organization_id)
-
-    # Positive balance means the item is limited, but not fully stopped yet.
     active = [item for item in raw_items if item.get("balance") is None or item.get("balance") <= 0]
     limited = [item for item in raw_items if item.get("balance") is not None and item.get("balance") > 0]
 
@@ -270,7 +266,6 @@ def build_stop_loss(point):
     for pid in list(org_state.keys()):
         if pid not in active_ids:
             org_state.pop(pid, None)
-
     for item in active:
         pid = item["productId"]
         source_time = _parse_dt(item.get("sourceTime"))
@@ -281,16 +276,13 @@ def build_stop_loss(point):
     _save_state(state)
 
     product_map = core.get_products_map()
-    history_end = (now.date() - timedelta(days=1))
+    history_end = now.date() - timedelta(days=1)
     history_start = history_end - timedelta(days=HISTORY_DAYS - 1)
-    rows = _iiko_server_history(
-        point,
-        active_ids,
-        history_start.isoformat(),
-        history_end.isoformat(),
+    rows, cost_field = _iiko_server_history(
+        point, active_ids, history_start.isoformat(), history_end.isoformat()
     )
     qty_by_slot, totals, weekday_occurrences = _history_stats(
-        rows, history_start.isoformat(), history_end.isoformat()
+        rows, history_start.isoformat(), history_end.isoformat(), cost_field
     )
 
     items = []
@@ -305,9 +297,9 @@ def build_stop_loss(point):
         hist = totals.get(pid, {})
         hist_qty = float(hist.get("qty", 0) or 0)
         avg_price = float(hist.get("revenue", 0) or 0) / hist_qty if hist_qty else 0.0
-        avg_cost = float(hist.get("cost", 0) or 0) / hist_qty if hist_qty else 0.0
+        avg_cost = float(hist.get("cost", 0) or 0) / hist_qty if hist_qty and cost_field else 0.0
         lost_revenue = expected_units * avg_price
-        lost_gp = expected_units * max(avg_price - avg_cost, 0)
+        lost_gp = expected_units * max(avg_price - avg_cost, 0) if cost_field else None
         duration_minutes = max(int((now - since).total_seconds() // 60), 0)
         name = (product_map.get(pid) or {}).get("name") or hist.get("name") or "Позиция iiko"
         items.append({
@@ -318,14 +310,15 @@ def build_stop_loss(point):
             "durationMinutes": duration_minutes,
             "expectedUnits": round(expected_units, 2),
             "averagePrice": round(avg_price, 2),
-            "averageCost": round(avg_cost, 2),
+            "averageCost": round(avg_cost, 2) if cost_field else None,
             "estimatedLostRevenue": round(lost_revenue, 2),
-            "estimatedLostGrossProfit": round(lost_gp, 2),
+            "estimatedLostGrossProfit": round(lost_gp, 2) if lost_gp is not None else None,
             "historyQty": round(hist_qty, 2),
         })
         total_expected_units += expected_units
         total_lost_revenue += lost_revenue
-        total_lost_gross_profit += lost_gp
+        if lost_gp is not None:
+            total_lost_gross_profit += lost_gp
 
     items.sort(key=lambda x: x["estimatedLostRevenue"], reverse=True)
     limited_items = []
@@ -337,6 +330,7 @@ def build_stop_loss(point):
     result = {
         "success": True,
         "source": "iikoCloud stop_lists + iikoServer SALES history",
+        "costField": cost_field,
         "point": {"code": department.get("code"), "name": department.get("name")},
         "checkedAt": now.isoformat(),
         "history": {"from": history_start.isoformat(), "to": history_end.isoformat(), "days": HISTORY_DAYS},
@@ -345,7 +339,7 @@ def build_stop_loss(point):
             "limitedPositions": len(limited_items),
             "expectedLostUnits": round(total_expected_units, 2),
             "estimatedLostRevenue": round(total_lost_revenue, 2),
-            "estimatedLostGrossProfit": round(total_lost_gross_profit, 2),
+            "estimatedLostGrossProfit": round(total_lost_gross_profit, 2) if cost_field else None,
         },
         "items": items,
         "limited": limited_items,
