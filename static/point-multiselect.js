@@ -200,8 +200,16 @@
     syncNative(false);
   }
 
-  const optionObserver = new MutationObserver(() => {
+  const optionObserver = new MutationObserver(mutations => {
     if (syncing) return;
+    const meaningful = mutations.some(mutation => {
+      const nodes = [...(mutation.addedNodes || []), ...(mutation.removedNodes || [])];
+      if (nodes.length) {
+        return nodes.some(node => !(node.nodeType === 1 && node.dataset?.dcMultiSynthetic === '1'));
+      }
+      return mutation.type === 'characterData';
+    });
+    if (!meaningful) return;
     cleanupNativeOptions();
     if (select.dataset.dcPointMultiEnhanced !== '1') enhance();
     else {
