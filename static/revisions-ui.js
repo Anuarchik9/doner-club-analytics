@@ -60,12 +60,16 @@
 
   function diagHtml(data) {
     const d = data?.diagnostics || {};
-    const inv = (d.inventoryTransactionValues || []).slice(0,8).join(', ');
-    const tx = (d.transactionValues || []).slice(0,12).join(', ');
+    const tx = (d.transactionValues || []).slice(0,10).join(', ');
     const stores = (d.storeValues || []).slice(0,12).join(', ');
+    const accounts = (d.accountValues || []).slice(0,12).join(', ');
+    const docs = (d.documentValues || []).slice(0,12).join(', ');
+    const matchedDocs = (d.matchedDocuments || []).slice(0,12).join(', ');
     const parts = [];
-    if (inv) parts.push(`Инвентаризация распознана как: ${escapeHtml(inv)}`);
-    else if (tx) parts.push(`Типы операций за месяц: ${escapeHtml(tx)}`);
+    if (matchedDocs) parts.push(`Распознаны документы: ${escapeHtml(matchedDocs)}`);
+    if (accounts) parts.push(`Счета/контра-счета: ${escapeHtml(accounts)}`);
+    if (docs) parts.push(`Документы в OLAP: ${escapeHtml(docs)}`);
+    if (tx) parts.push(`Типы операций: ${escapeHtml(tx)}`);
     if (stores) parts.push(`Склады в OLAP: ${escapeHtml(stores)}`);
     return parts.length ? `<span class="diag">${parts.join('<br>')}</span>` : '';
   }
@@ -86,7 +90,7 @@
         historyHost.innerHTML = `<table class="revision-history"><thead><tr><th>Дата</th><th class="num">Недостача</th><th class="num">Излишки</th><th class="num">Итог</th></tr></thead><tbody>${data.history.map(row => `<tr><td><b>${dateRu(row.date)}</b><div class="rev-small">${escapeHtml((row.stores || []).join(' · '))}</div></td><td class="num negative">${money(row.shortage)}</td><td class="num positive">${money(row.surplus)}</td><td class="num ${row.net < 0 ? 'negative' : row.net > 0 ? 'positive' : ''}">${money(row.net)}</td></tr>`).join('')}</tbody></table>`;
       } else {
         historyHost.classList?.add('empty');
-        historyHost.innerHTML = `<div><strong>За выбранный месяц ревизии пока не распознаны</strong>iikoServer доступен. Мы автоматически проверили фактические названия операций и складов в TRANSACTIONS OLAP.${diagHtml(data)}</div>`;
+        historyHost.innerHTML = `<div><strong>За выбранный месяц ревизии пока не распознаны</strong>iikoServer доступен. Проверяем не только тип операции, но и номер документа и счета недостач/излишков.${diagHtml(data)}</div>`;
       }
     }
 
@@ -123,7 +127,7 @@
     button.disabled = true;
     const oldText = button.textContent;
     button.textContent = 'Получаем…';
-    show('', `<b>${point} · ${monthLabel(period)}</b><span class="scope">Контур: ${scopes[pointKey] || point}</span>Ищем фактические проводки инвентаризации в iikoServer…`);
+    show('', `<b>${point} · ${monthLabel(period)}</b><span class="scope">Контур: ${scopes[pointKey] || point}</span>Ищем документы и проводки инвентаризации в iikoServer…`);
     try {
       const data = await loadData(pointKey, period);
       if (!data) return;
