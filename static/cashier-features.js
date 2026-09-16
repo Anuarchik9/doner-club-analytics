@@ -24,6 +24,7 @@
   const num=v=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Number(v||0));
   const pct=v=>`${Math.abs(Number(v||0)).toLocaleString('ru-RU',{maximumFractionDigits:1})}%`;
   const dateText=s=>{const [y,m,d]=String(s||'').slice(0,10).split('-');return d&&m&&y?`${d}.${m}.${y}`:String(s||'—')};
+  const html=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
   function findSection(title){
     for(const h of document.querySelectorAll('.section h2')){
@@ -98,14 +99,14 @@
     $('cashierRisk').textContent=risk?.cashier||'—';
     $('cashierRiskMeta').textContent=risk?`${risk.change<0?'↓':'↑'} ${pct(risk.change)} · ${money(risk.averageCheck)}`:'Нет сопоставимой базы';
 
-    $('cashierTbody').innerHTML=rows.length?rows.map(x=>`<tr><td><b>${escapeHtml(String(x.cashier))}</b></td><td class="num">${num(x.checks)}</td><td class="num">${money(x.revenue)}</td><td class="num"><b>${money(x.averageCheck)}</b></td><td class="num">${deltaHtml(x.averageCheck,x.previous?.averageCheck)}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">Нет данных по кассирам</td></tr>';
+    $('cashierTbody').innerHTML=rows.length?rows.map(x=>`<tr><td><b>${html(x.cashier)}</b></td><td class="num">${num(x.checks)}</td><td class="num">${money(x.revenue)}</td><td class="num"><b>${money(x.averageCheck)}</b></td><td class="num">${deltaHtml(x.averageCheck,x.previous?.averageCheck)}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">Нет данных по кассирам</td></tr>';
 
     const down=declines.filter(x=>Number(x.change)<-5);
     const signal=$('cashierSignal');
     if(down.length){
       const first=down[0];
       signal.style.display='block';
-      signal.innerHTML=`<b>Сигнал по среднему чеку:</b> у ${down.length} кассир${down.length===1?'а':'ов'} снижение больше 5%. Самое заметное — <b>${escapeHtml(String(first.cashier))}</b>: ${first.change.toLocaleString('ru-RU',{maximumFractionDigits:1})}% к сопоставимому периоду.`;
+      signal.innerHTML=`<b>Сигнал по среднему чеку:</b> у ${down.length} кассир${down.length===1?'а':'ов'} снижение больше 5%. Самое заметное — <b>${html(first.cashier)}</b>: ${first.change.toLocaleString('ru-RU',{maximumFractionDigits:1})}% к сопоставимому периоду.`;
     }else signal.style.display='none';
   }
 
@@ -118,7 +119,7 @@
       const [cur,prev]=await Promise.all([loadOne(point,a,b,channel),loadOne(point,pa,pb,channel).catch(()=>null)]);
       render(cur,prev,pa,pb);
     }catch(e){
-      $('cashierTbody').innerHTML=`<tr><td colspan="5" class="muted">Не удалось получить кассиров: ${escapeHtml(e.message)}</td></tr>`;
+      $('cashierTbody').innerHTML=`<tr><td colspan="5" class="muted">Не удалось получить кассиров: ${html(e.message)}</td></tr>`;
       ['cashierCount','cashierOverallAvg','cashierBest','cashierRisk'].forEach(id=>{if($(id))$(id).textContent='—'});
     }
   }
