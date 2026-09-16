@@ -10,7 +10,7 @@
   const style = document.createElement('style');
   style.textContent = `
     .revision-status{display:none;margin-top:12px;padding:13px 15px;border:1px solid #3a342d;border-radius:14px;background:#14110e;color:#c8b7a8;font-size:12px;line-height:1.5}
-    .revision-status.show{display:block}.revision-status.ok{border-color:#294739;background:#0d1712;color:#9fe4bf}.revision-status.warn{border-color:#5a4228;background:#1b140d;color:#efc699}.revision-status.err{border-color:#653232;background:#211010;color:#ffb2b2}.revision-status b{color:#fff}.revision-status .scope{display:block;margin-top:4px;color:#a99b8d}.go[disabled]{opacity:.65;cursor:wait}
+    .revision-status.show{display:block}.revision-status.ok{border-color:#294739;background:#0d1712;color:#9fe4bf}.revision-status.warn{border-color:#5a4228;background:#1b140d;color:#efc699}.revision-status.err{border-color:#653232;background:#211010;color:#ffb2b2}.revision-status b{color:#fff}.revision-status .scope{display:block;margin-top:4px;color:#a99b8d}.revision-status .diag{display:block;margin-top:7px;color:#9b8e82;font-size:10px}.go[disabled]{opacity:.65;cursor:wait}
     .rev-money.red{color:#ff7b7b}.rev-money.green{color:#6fdfa6}.rev-money.orange{color:#ff8b55}
     .revision-history{width:100%;border-collapse:collapse;margin-top:12px}.revision-history th{padding:10px 8px;color:#777;font-size:10px;text-transform:uppercase;letter-spacing:.06em;text-align:left;border-bottom:1px solid #292929}.revision-history td{padding:12px 8px;border-bottom:1px solid #222;font-size:12px}.revision-history tr:last-child td{border-bottom:0}.revision-history .num{text-align:right;font-weight:800}.revision-history .negative{color:#ff8b8b}.revision-history .positive{color:#8be0b2}
     .rev-list-block{display:grid;gap:5px}.rev-list-item{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:1.35}.rev-list-item span:first-child{color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rev-list-item b{white-space:nowrap}.rev-list-item.neg b{color:#ff8b8b}.rev-list-item.pos b{color:#8be0b2}.rev-empty{color:#777;font-size:11px}.rev-small{font-size:10px;color:#777;margin-top:4px}
@@ -58,6 +58,18 @@
     return `<div class="rev-list-block">${items.slice(0,5).map(item => `<div class="rev-list-item ${kind}"><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><b>${money(kind === 'neg' ? item.shortage : item.surplus)}</b></div>`).join('')}</div>`;
   }
 
+  function diagHtml(data) {
+    const d = data?.diagnostics || {};
+    const inv = (d.inventoryTransactionValues || []).slice(0,8).join(', ');
+    const tx = (d.transactionValues || []).slice(0,12).join(', ');
+    const stores = (d.storeValues || []).slice(0,12).join(', ');
+    const parts = [];
+    if (inv) parts.push(`Инвентаризация распознана как: ${escapeHtml(inv)}`);
+    else if (tx) parts.push(`Типы операций за месяц: ${escapeHtml(tx)}`);
+    if (stores) parts.push(`Склады в OLAP: ${escapeHtml(stores)}`);
+    return parts.length ? `<span class="diag">${parts.join('<br>')}</span>` : '';
+  }
+
   function render(data) {
     const cards = [...document.querySelectorAll('.cards .card')];
     const s = data.summary || {};
@@ -74,7 +86,7 @@
         historyHost.innerHTML = `<table class="revision-history"><thead><tr><th>Дата</th><th class="num">Недостача</th><th class="num">Излишки</th><th class="num">Итог</th></tr></thead><tbody>${data.history.map(row => `<tr><td><b>${dateRu(row.date)}</b><div class="rev-small">${escapeHtml((row.stores || []).join(' · '))}</div></td><td class="num negative">${money(row.shortage)}</td><td class="num positive">${money(row.surplus)}</td><td class="num ${row.net < 0 ? 'negative' : row.net > 0 ? 'positive' : ''}">${money(row.net)}</td></tr>`).join('')}</tbody></table>`;
       } else {
         historyHost.classList?.add('empty');
-        historyHost.innerHTML = `<div><strong>За выбранный месяц ревизии не найдены</strong>iikoServer доступен, но для выбранного контура не найдено проведённых проводок инвентаризации INVTR.</div>`;
+        historyHost.innerHTML = `<div><strong>За выбранный месяц ревизии пока не распознаны</strong>iikoServer доступен. Мы автоматически проверили фактические названия операций и складов в TRANSACTIONS OLAP.${diagHtml(data)}</div>`;
       }
     }
 
@@ -111,13 +123,18 @@
     button.disabled = true;
     const oldText = button.textContent;
     button.textContent = 'Получаем…';
-    show('', `<b>${point} · ${monthLabel(period)}</b><span class="scope">Контур: ${scopes[pointKey] || point}</span>Получаем проведённые инвентаризации из iikoServer…`);
+    show('', `<b>${point} · ${monthLabel(period)}</b><span class="scope">Контур: ${scopes[pointKey] || point}</span>Ищем фактические проводки инвентаризации в iikoServer…`);
     try {
       const data = await loadData(pointKey, period);
       if (!data) return;
       render(data);
       const stores = data.stores?.length ? data.stores.join(' + ') : (scopes[pointKey] || point);
-      show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Найдено ревизий: <b>${data.summary?.revisionsCount || 0}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
+      const count = Number(data.summary?.revisionsCount || 0);
+      if (count > 0) {
+        show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Найдено ревизий: <b>${count}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
+      } else {
+        show('warn', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Соединение работает, но ревизии ещё не сопоставились с полями вашей версии iiko.${diagHtml(data)}`);
+      }
     } catch (error) {
       show('err', `<b>Не удалось получить ревизии.</b><br>${escapeHtml(String(error?.message || error))}`);
     } finally {
