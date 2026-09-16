@@ -15,6 +15,7 @@
     .revision-status.warn{border-color:#5a4228;background:#1b140d;color:#efc699}
     .revision-status.err{border-color:#653232;background:#211010;color:#ffb2b2}
     .revision-status b{color:#fff}
+    .revision-status .scope{display:block;margin-top:4px;color:#a99b8d}
     .go[disabled]{opacity:.65;cursor:wait}
   `;
   document.head.appendChild(style);
@@ -29,6 +30,11 @@
     const m = /^(\d{4})-(\d{2})$/.exec(String(value || ''));
     if (!m) return value || '—';
     return `${monthNames[Number(m[2]) - 1]} ${m[1]}`;
+  };
+
+  const scopes = {
+    arai: 'Арай (АРАЙ общий) + Арай (Хоз.товары АРАЙ)',
+    workshop: 'ЦЕХ Основной (Цех) + ЦЕХ Основной (Цех. Хоз.товары)'
   };
 
   function show(kind, html) {
@@ -49,7 +55,9 @@
   }
 
   button.addEventListener('click', async () => {
-    const point = $('revisionPoint')?.selectedOptions?.[0]?.textContent?.trim() || 'Точка';
+    const select = $('revisionPoint');
+    const pointKey = select?.value || 'arai';
+    const point = select?.selectedOptions?.[0]?.textContent?.trim() || 'Точка';
     const period = $('revisionPeriod')?.value;
     if (!period) {
       show('err', 'Выбери месяц ревизии.');
@@ -59,12 +67,12 @@
     button.disabled = true;
     const oldText = button.textContent;
     button.textContent = 'Проверяем…';
-    show('', `<b>${point} · ${monthLabel(period)}</b><br>Проверяем соединение с iikoServer…`);
+    show('', `<b>${point} · ${monthLabel(period)}</b><span class="scope">Контур: ${scopes[pointKey] || point}</span>Проверяем соединение с iikoServer…`);
 
     try {
       const result = await verifyIiko();
       if (!result) return;
-      show('warn', `<b>${point} · ${monthLabel(period)}</b><br>iikoServer доступен. Кнопка работает. Сейчас для раздела «Ревизии» ещё подключаем именно документы инвентаризации — поэтому суммы пока не подставляются.`);
+      show('warn', `<b>${point} · ${monthLabel(period)}</b><span class="scope">Контур: ${scopes[pointKey] || point}</span>iikoServer доступен. Следующим шагом подключаем документы «Инвентаризация» именно для этого контура; суммы пока не подставляются.`);
     } catch (error) {
       show('err', `<b>Не удалось проверить iikoServer.</b><br>${String(error?.message || error)}`);
     } finally {
