@@ -14,6 +14,11 @@
   if(search) search.placeholder='Поиск по названию';
 
   const meatCards=document.querySelector('.meat-cards');
+  if(meatCards){
+    const panel=meatCards.closest('.panel');
+    const title=panel?.querySelector('h3');
+    if(title) title.textContent='Курица / говядина / ассорти';
+  }
   if(meatCards&&!document.getElementById('assortiRevenue')){
     meatCards.classList.add('dc-three');
     const card=document.createElement('div');
