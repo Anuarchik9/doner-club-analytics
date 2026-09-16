@@ -5,10 +5,20 @@
   const style=document.createElement('style');
   style.textContent=`
     .tablebox th:nth-child(2),.tablebox td:nth-child(2){display:none!important}
+    .tablebox table{width:min(100%,920px)!important;min-width:620px!important;margin:0!important;table-layout:auto}
+    .tablebox th:first-child,.tablebox td:first-child{width:auto!important;max-width:560px}
+    .tablebox th:nth-child(3),.tablebox td:nth-child(3){width:125px!important;min-width:125px!important}
+    .tablebox th:nth-child(4),.tablebox td:nth-child(4){width:155px!important;min-width:155px!important}
+    .tablebox td:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .logo{width:48px!important;height:48px!important;border-radius:15px!important;background:transparent!important;overflow:hidden!important;padding:0!important;display:block!important;line-height:0!important}
+    .logo img{display:block;width:100%;height:100%;object-fit:cover;border-radius:15px}
     .meat-cards.dc-three{grid-template-columns:repeat(3,1fr)!important}
-    @media(max-width:700px){.meat-cards.dc-three{grid-template-columns:1fr!important}}
+    @media(max-width:700px){.meat-cards.dc-three{grid-template-columns:1fr!important}.tablebox table{min-width:570px!important}.tablebox th:nth-child(3),.tablebox td:nth-child(3){width:105px!important;min-width:105px!important}.tablebox th:nth-child(4),.tablebox td:nth-child(4){width:135px!important;min-width:135px!important}}
   `;
   document.head.appendChild(style);
+
+  const logo=document.querySelector('.logo');
+  if(logo) logo.innerHTML='<img src="/static/brand-logo.svg" alt="Doner Club">';
 
   const search=document.getElementById('search');
   if(search) search.placeholder='Поиск по названию';
