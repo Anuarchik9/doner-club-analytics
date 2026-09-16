@@ -16,8 +16,8 @@ def install_preset_controls(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/preset-controls.js"></script>'
-                if tag not in body and "</body>" in body:
+                tag = '<script src="/static/preset-controls.js?v=20260917-1"></script>'
+                if "preset-controls.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
             except Exception:
