@@ -20,6 +20,9 @@
     .dc-stop-more{border:1px solid var(--line);background:#101010;color:#ddd;border-radius:999px;padding:9px 18px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
     .dc-stop-more:hover{border-color:var(--orange);color:#fff;background:var(--soft)}
 
+    /* Explain the old generic «Прочее» bucket with the actual products inside it. */
+    .dc-other-breakdown{display:block;margin-top:4px;color:#c8c8c1;font-size:10px;line-height:1.35;max-width:520px}
+
     /* Values on desktop charts were too small to read at a glance. */
     @media(min-width:901px){
       .dc-trend-value{font-size:13px!important;font-weight:900!important}
@@ -32,6 +35,12 @@
     }
   `;
   document.head.appendChild(style);
+
+  /* Force the exact user-supplied square logo and cache-bust older artwork. */
+  const headerLogo = document.querySelector('.logo');
+  if (headerLogo) {
+    headerLogo.innerHTML = '<img src="/static/brand-logo.svg?v=20260916-4" alt="Doner Club">';
+  }
 
   function pointsFrom(polyline){
     const raw = (polyline.getAttribute('points') || '').trim();
@@ -164,4 +173,89 @@
     });
     stopWatcher.observe(document.body,{childList:true,subtree:true});
   }
+
+  /* Add a value above every active hour on desktop, not only peak/minimum hours. */
+  const compact = value => new Intl.NumberFormat('ru-RU',{notation:'compact',maximumFractionDigits:1}).format(Number(value||0));
+  function addHourlyValueLabels(){
+    if (window.innerWidth < 901) return;
+    const root = document.getElementById('hourRevenueChart');
+    const svg = root?.querySelector('svg');
+    if (!svg) return;
+    let receipt = null;
+    try { if (typeof receiptCurrent !== 'undefined') receipt = receiptCurrent; } catch (_) {}
+    const hourly = receipt?.hourly || [];
+    if (!hourly.length) return;
+    const hits = Array.from(svg.querySelectorAll('.dc-trend-hit'));
+    if (hits.length !== hourly.length) return;
+    const existingX = Array.from(svg.querySelectorAll('.dc-trend-value')).map(el=>Number(el.getAttribute('x'))).filter(Number.isFinite);
+    hourly.forEach((item,index)=>{
+      const revenue = Number(item.revenue||0);
+      if (revenue <= 0) return;
+      const hit = hits[index];
+      const x = Number(hit.getAttribute('cx'));
+      const y = Number(hit.getAttribute('cy'));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (existingX.some(v=>Math.abs(v-x)<0.5)) return;
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('class','dc-trend-value dc-hour-extra-label');
+      text.setAttribute('x',String(x));
+      text.setAttribute('y',String(Math.max(13,y-(index%2?25:11))));
+      text.textContent = compact(revenue);
+      svg.appendChild(text);
+      existingX.push(x);
+    });
+  }
+
+  function installHourlyWatcher(){
+    const root = document.getElementById('hourRevenueChart');
+    if (!root || root.dataset.dcHourWatcher === '1') return false;
+    root.dataset.dcHourWatcher = '1';
+    new MutationObserver(()=>setTimeout(addHourlyValueLabels,0)).observe(root,{childList:true,subtree:true});
+    setTimeout(addHourlyValueLabels,0);
+    return true;
+  }
+  if(!installHourlyWatcher()){
+    const hourBoot=new MutationObserver(()=>{if(installHourlyWatcher())hourBoot.disconnect()});
+    hourBoot.observe(document.body,{childList:true,subtree:true});
+  }
+  document.getElementById('go')?.addEventListener('click',()=>{setTimeout(addHourlyValueLabels,900);setTimeout(addHourlyValueLabels,2400)});
+
+  /* Replace vague «Прочее» with a concrete list of the main products inside that bucket. */
+  function localCategory(name){
+    const n=String(name||'').toLowerCase();
+    if(n.includes('донер'))return'Донеры';
+    if(n.includes('combo')||n.includes('комбо')||n.includes('go!'))return'Комбо';
+    if(n.includes('pepsi')||n.includes('айран')||n.includes('вода')||n.includes('сок')||n.includes('чай')||n.includes('кофе')||n.includes('напит'))return'Напитки';
+    if(n.includes('фри')||n.includes('наггет')||n.includes('картоф')||n.includes('закуск'))return'Гарниры и закуски';
+    if(n.includes('соус')||n.includes('халап')||n.includes('сыр')||n.includes('добав'))return'Соусы и добавки';
+    return'Прочее';
+  }
+  function explainOtherCategory(){
+    const list=document.getElementById('categoryList');
+    if(!list)return;
+    let data=null;
+    try{if(typeof currentData!=='undefined')data=currentData}catch(_){}
+    const products=(data?.products||[]).filter(p=>localCategory(p.name)==='Прочее').sort((a,b)=>Number(b.revenue||0)-Number(a.revenue||0));
+    if(!products.length)return;
+    const row=Array.from(list.querySelectorAll('.cat-row')).find(r=>{
+      const t=(r.querySelector('.cat-name strong')?.textContent||'').trim();
+      return t==='Прочее'||t==='Другие позиции';
+    });
+    if(!row)return;
+    const box=row.querySelector('.cat-name');
+    const title=box?.querySelector('strong');
+    if(title)title.textContent='Другие позиции';
+    if(!box)return;
+    const names=products.slice(0,4).map(p=>String(p.name||'').trim()).filter(Boolean);
+    const more=Math.max(0,products.length-names.length);
+    const text=`Внутри: ${names.join(' · ')}${more?` · ещё ${more}`:''}`;
+    let detail=box.querySelector('.dc-other-breakdown');
+    if(!detail){detail=document.createElement('span');detail.className='dc-other-breakdown';box.appendChild(detail)}
+    if(detail.textContent!==text)detail.textContent=text;
+    row.title=products.map(p=>String(p.name||'')).filter(Boolean).join(' · ');
+  }
+  const categoryList=document.getElementById('categoryList');
+  if(categoryList)new MutationObserver(()=>setTimeout(explainOtherCategory,0)).observe(categoryList,{childList:true});
+  document.getElementById('go')?.addEventListener('click',()=>{setTimeout(explainOtherCategory,700);setTimeout(explainOtherCategory,2200)});
+  setTimeout(explainOtherCategory,1000);
 })();
