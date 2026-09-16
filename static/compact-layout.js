@@ -14,25 +14,24 @@
     .dc-econ-more{border:1px solid var(--line);background:#101010;color:#ddd;border-radius:999px;padding:9px 18px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
     .dc-econ-more:hover{border-color:var(--orange);color:#fff;background:var(--soft)}
 
-    /* Categories should read as one compact unit rather than labels and bars living far apart. */
-    #categoryList{max-width:900px!important;gap:11px!important}
-    #categoryList .cat-row{grid-template-columns:190px minmax(240px,480px) 115px!important;gap:14px!important;justify-content:start!important}
+    /* Categories should read as one compact unit with no huge dead zone in the middle. */
+    #categoryList{width:100%!important;max-width:none!important;gap:11px!important}
+    #categoryList .cat-row{grid-template-columns:minmax(190px,300px) minmax(260px,1fr) 120px!important;gap:16px!important;justify-content:stretch!important}
     #categoryList .cat-name{min-width:0}
-    #categoryList .track{width:100%}
+    #categoryList .track{width:100%;margin:0!important}
     #categoryList .cat-share{text-align:right!important}
 
     /* Branded visual cluster inside Online / Offline cards. */
     .channel-mix-card{padding-right:46%!important}
     .dc-mix-icons{position:absolute;right:22px;top:50%;transform:translateY(-48%);width:40%;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;z-index:2}
-    .dc-brand-badge{height:34px;min-width:34px;padding:0 9px;border-radius:11px;border:1px solid #323232;background:#0b0b0b;display:inline-flex;align-items:center;justify-content:center;gap:6px;color:#f5f5f2;font-size:10px;font-weight:900;letter-spacing:-.01em;box-shadow:0 7px 18px rgba(0,0,0,.22)}
+    .dc-brand-badge{height:36px;min-width:36px;padding:0 10px;border-radius:12px;border:1px solid #323232;background:linear-gradient(160deg,#111,#090909);display:inline-flex;align-items:center;justify-content:center;gap:6px;color:#f5f5f2;font-size:10px;font-weight:900;letter-spacing:-.01em;box-shadow:0 7px 18px rgba(0,0,0,.22)}
     .dc-brand-badge i{font-style:normal;font-size:15px;line-height:1}
     .dc-brand-badge.yandex i{color:#ff5252}.dc-brand-badge.wolt i{color:#5bc9ff}.dc-brand-badge.glovo i{color:#ffd34d}.dc-brand-badge.choco i{color:#ff9a63}.dc-brand-badge.starter i{color:#a8e063}
     .dc-brand-badge.kaspi i{color:#ff5555}.dc-brand-badge.cash i{color:#8fe1ad}.dc-brand-badge.card i{color:#9ec7ff}.dc-brand-badge.call i{color:#ffb36b}
 
     @media(max-width:900px){
-      #categoryList{max-width:none!important}
       #categoryList .cat-row{grid-template-columns:minmax(0,1fr) minmax(120px,.8fr) auto!important}
-      .channel-mix-card{padding-right:20px!important;padding-bottom:82px!important}
+      .channel-mix-card{padding-right:20px!important;padding-bottom:84px!important}
       .dc-mix-icons{left:20px;right:20px;bottom:16px;top:auto;transform:none;width:auto;justify-content:flex-start}
     }
     @media(max-width:600px){
