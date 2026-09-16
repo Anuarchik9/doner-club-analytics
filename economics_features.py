@@ -40,6 +40,8 @@ def _category(name):
         return "Комбо"
     if "донер" in text or "doner" in text:
         return "Донеры"
+    if "батон" in text or "baton" in text:
+        return "Батоны"
     if any(token in text for token in ("фри", "картоф", "fri", "fries")):
         return "Фри"
     if any(token in text for token in ("соус", "sauce", "кетчуп", "майонез")):
@@ -150,6 +152,7 @@ def build_economics(point, date_from, date_to, channel="all"):
                 **item,
                 **metrics,
                 "quantity": round(item["quantity"], 3),
+                "costPerUnit": round(item["cost"] / item["quantity"], 2) if item["quantity"] else 0,
             }
             product_list.append(prepared)
             if prepared["revenue"] > 0 and abs(prepared["cost"]) < 0.005:
