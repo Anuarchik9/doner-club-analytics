@@ -26,6 +26,7 @@ def install_revisions_ui(app):
                     '<script src="/static/revision-product-diagnostic.js?v=20260916-1"></script>'
                     '<script src="/static/revision-product-modal-large.js?v=20260916-1"></script>'
                     '<script src="/static/revision-product-modal-fix.js?v=20260916-1"></script>'
+                    '<script src="/static/revision-investigation.js?v=20260916-1"></script>'
                     '<script src="/static/revisions-ui.js?v=20260916-6"></script>'
                 )
                 if "/static/revision-details.js" not in body and "</body>" in body:
