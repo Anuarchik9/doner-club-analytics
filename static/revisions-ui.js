@@ -13,7 +13,11 @@
     .revision-status.show{display:block}.revision-status.ok{border-color:#294739;background:#0d1712;color:#9fe4bf}.revision-status.warn{border-color:#5a4228;background:#1b140d;color:#efc699}.revision-status.err{border-color:#653232;background:#211010;color:#ffb2b2}.revision-status b{color:#fff}.revision-status .scope{display:block;margin-top:4px;color:#a99b8d}.revision-status .diag{display:block;margin-top:7px;color:#9b8e82;font-size:10px}.go[disabled]{opacity:.65;cursor:wait}
     .rev-money.red{color:#ff7b7b}.rev-money.green{color:#6fdfa6}.rev-money.orange{color:#ff8b55}
     .revision-history{width:100%;border-collapse:collapse;margin-top:12px}.revision-history th{padding:10px 8px;color:#777;font-size:10px;text-transform:uppercase;letter-spacing:.06em;text-align:left;border-bottom:1px solid #292929}.revision-history td{padding:12px 8px;border-bottom:1px solid #222;font-size:12px}.revision-history tr:last-child td{border-bottom:0}.revision-history .num{text-align:right;font-weight:800}.revision-history .negative{color:#ff8b8b}.revision-history .positive{color:#8be0b2}
-    .rev-list-block{display:grid;gap:5px}.rev-list-item{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:1.35}.rev-list-item span:first-child{color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rev-list-item b{white-space:nowrap}.rev-list-item.neg b{color:#ff8b8b}.rev-list-item.pos b{color:#8be0b2}.rev-empty{color:#777;font-size:11px}.rev-small{font-size:10px;color:#777;margin-top:4px}
+    .revision-row{grid-template-columns:120px minmax(0,1fr) auto!important;align-items:start!important}
+    .rev-list-block{display:grid;gap:6px;min-width:0}.rev-list-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-size:11px;line-height:1.35}.rev-list-item span:first-child{color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rev-list-item b{white-space:nowrap}.rev-list-item.neg b,.rev-list-item.repeat b{color:#ff8b8b}.rev-list-item.pos b{color:#8be0b2}.rev-empty{color:#777;font-size:11px}.rev-small{font-size:10px;color:#777;margin-top:4px;line-height:1.35}.rev-list-extra[hidden]{display:none}.rev-list-extra{display:grid;gap:6px}.rev-more{justify-self:start;margin-top:5px;padding:6px 10px;border:1px solid #343434;border-radius:999px;background:#0b0b0b;color:#ddd;font:700 10px Inter,system-ui;cursor:pointer}.rev-more:hover{border-color:#5b4a41;color:#fff}
+    .rev-quality{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}.rev-quality-card{padding:13px 15px;border:1px solid #242424;border-radius:14px;background:#0e0e0e}.rev-quality-card span{display:block;color:#777;font-size:10px;text-transform:uppercase;letter-spacing:.06em}.rev-quality-card b{display:block;margin-top:5px;font-size:18px}.rev-quality-card small{display:block;margin-top:3px;color:#777;font-size:10px;line-height:1.35}
+    @media(max-width:900px){.rev-quality{grid-template-columns:1fr 1fr}}
+    @media(max-width:600px){.revision-row{grid-template-columns:1fr auto!important}.revision-row>b{grid-column:1/-1}.rev-quality{grid-template-columns:1fr 1fr}.revision-history{font-size:10px}.revision-history th,.revision-history td{padding:8px 5px}}
   `;
   document.head.appendChild(style);
 
@@ -25,6 +29,15 @@
     filters.insertAdjacentElement('afterend', status);
   }
 
+  const cardsSection = document.querySelector('.cards');
+  let quality = $('revisionQuality');
+  if (!quality && cardsSection) {
+    quality = document.createElement('div');
+    quality.id = 'revisionQuality';
+    quality.className = 'rev-quality';
+    cardsSection.insertAdjacentElement('afterend', quality);
+  }
+
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const monthLabel = value => {
     const m = /^(\d{4})-(\d{2})$/.exec(String(value || ''));
@@ -33,6 +46,7 @@
   };
   const scopes = {arai:'Арай (АРАЙ общий) + Арай (Хоз.товары АРАЙ)',workshop:'ЦЕХ Основной (Цех) + ЦЕХ Основной (Цех. Хоз.товары)'};
   const money = value => `${Math.round(Number(value || 0)).toLocaleString('ru-RU')} ₸`;
+  const pct = value => `${Number(value || 0).toLocaleString('ru-RU',{maximumFractionDigits:1})}%`;
   const dateRu = value => {
     if (!value) return '—';
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -53,9 +67,21 @@
     if (subEl) subEl.textContent = sub;
   }
 
-  function listHtml(items, kind, emptyText) {
+  function itemValue(item, kind) {
+    if (kind === 'neg') return money(item.shortage);
+    if (kind === 'pos') return money(item.surplus);
+    return `${Number(item.shortageRevisionCount || 0)} рев.`;
+  }
+
+  function listHtml(items, kind, emptyText, key) {
     if (!items?.length) return `<div class="rev-empty">${escapeHtml(emptyText)}</div>`;
-    return `<div class="rev-list-block">${items.slice(0,5).map(item => `<div class="rev-list-item ${kind}"><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><b>${money(kind === 'neg' ? item.shortage : item.surplus)}</b></div>`).join('')}</div>`;
+    const row = item => `<div class="rev-list-item ${kind}"><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><b>${itemValue(item,kind)}</b></div>`;
+    const first = items.slice(0,5).map(row).join('');
+    const rest = items.slice(5).map(row).join('');
+    const more = items.length > 5
+      ? `<div class="rev-list-extra" id="rev-extra-${key}" hidden>${rest}</div><button type="button" class="rev-more" data-target="rev-extra-${key}" data-total="${items.length}">Показать все ${items.length}</button>`
+      : '';
+    return `<div class="rev-list-block">${first}${more}</div>`;
   }
 
   function diagHtml(data) {
@@ -74,34 +100,50 @@
     return parts.length ? `<span class="diag">${parts.join('<br>')}</span>` : '';
   }
 
+  function renderQuality(summary) {
+    if (!quality) return;
+    const s = summary || {};
+    quality.innerHTML = `
+      <div class="rev-quality-card"><span>Оборот расхождений</span><b>${money(s.grossVariance)}</b><small>Недостачи + излишки за период</small></div>
+      <div class="rev-quality-card"><span>Средняя недостача / ревизию</span><b>${money(s.avgShortagePerRevision)}</b><small>Не общий итог, а среднее на одну дату ревизии</small></div>
+      <div class="rev-quality-card"><span>Концентрация недостачи</span><b>${pct(s.top5ShortageShare)}</b><small>Доля TOP-5 позиций во всей недостаче</small></div>
+      <div class="rev-quality-card"><span>Документов найдено</span><b>${Number(s.documentsCount || 0).toLocaleString('ru-RU')}</b><small>Инвентаризационные документы iiko за период</small></div>`;
+  }
+
   function render(data) {
     const cards = [...document.querySelectorAll('.cards .card')];
     const s = data.summary || {};
-    setCard(cards[0], dateRu(s.lastRevision), s.revisionsCount ? `${s.revisionsCount} ревиз. за период` : 'Ревизий за период нет');
+    setCard(cards[0], dateRu(s.lastRevision), s.revisionsCount ? `${s.revisionsCount} дат ревизии · ${s.documentsCount || 0} документов` : 'Ревизий за период нет');
     setCard(cards[1], money(s.shortage), 'Сумма отрицательных расхождений', s.shortage ? 'red' : '');
     setCard(cards[2], money(s.surplus), 'Сумма положительных расхождений', s.surplus ? 'green' : '');
     setCard(cards[3], money(s.net), 'Излишки минус недостача', s.net < 0 ? 'red' : s.net > 0 ? 'green' : '');
+    renderQuality(s);
 
     const panels = [...document.querySelectorAll('.grid .panel')];
     const historyHost = panels[0]?.querySelector('.empty') || panels[0];
     if (historyHost) {
       if (data.history?.length) {
         historyHost.classList?.remove('empty');
-        historyHost.innerHTML = `<table class="revision-history"><thead><tr><th>Дата</th><th class="num">Недостача</th><th class="num">Излишки</th><th class="num">Итог</th></tr></thead><tbody>${data.history.map(row => `<tr><td><b>${dateRu(row.date)}</b><div class="rev-small">${escapeHtml((row.stores || []).join(' · '))}</div></td><td class="num negative">${money(row.shortage)}</td><td class="num positive">${money(row.surplus)}</td><td class="num ${row.net < 0 ? 'negative' : row.net > 0 ? 'positive' : ''}">${money(row.net)}</td></tr>`).join('')}</tbody></table>`;
+        historyHost.innerHTML = `<table class="revision-history"><thead><tr><th>Дата / документы</th><th class="num">Недостача</th><th class="num">Излишки</th><th class="num">Оборот</th><th class="num">Итог</th></tr></thead><tbody>${data.history.map(row => {
+          const docs = (row.documents || []).join(' · ');
+          const stores = (row.stores || []).join(' · ');
+          return `<tr><td><b>${dateRu(row.date)}</b>${docs ? `<div class="rev-small">${escapeHtml(docs)}</div>` : ''}${stores ? `<div class="rev-small">${escapeHtml(stores)}</div>` : ''}</td><td class="num negative">${money(row.shortage)}</td><td class="num positive">${money(row.surplus)}</td><td class="num">${money(row.gross ?? (Number(row.shortage||0)+Number(row.surplus||0)))}</td><td class="num ${row.net < 0 ? 'negative' : row.net > 0 ? 'positive' : ''}">${money(row.net)}</td></tr>`;
+        }).join('')}</tbody></table>`;
       } else {
         historyHost.classList?.add('empty');
         historyHost.innerHTML = `<div><strong>За выбранный месяц ревизии пока не распознаны</strong>iikoServer доступен. Проверяем не только тип операции, но и номер документа и счета недостач/излишков.${diagHtml(data)}</div>`;
       }
     }
 
+    if (panels[1]?.querySelector('h3')) panels[1].querySelector('h3').textContent = 'Ключевые отклонения';
     const list = panels[1]?.querySelector('.revision-list');
     if (list) {
       const recurring = data.recurringShortages || [];
       list.innerHTML = `
-        <div class="revision-row"><b>TOP недостач</b><span>${listHtml(data.topShortages,'neg','Недостач нет')}</span><span class="pill">₸</span><span>${data.topShortages?.length || 0}</span></div>
-        <div class="revision-row"><b>TOP излишков</b><span>${listHtml(data.topSurpluses,'pos','Излишков нет')}</span><span class="pill">₸</span><span>${data.topSurpluses?.length || 0}</span></div>
-        <div class="revision-row"><b>Повторяющиеся</b><span>${recurring.length ? `<div class="rev-list-block">${recurring.slice(0,5).map(item => `<div class="rev-list-item neg"><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><b>${item.shortageRevisionCount}×</b></div>`).join('')}</div>` : '<div class="rev-empty">Повторяющихся недостач нет</div>'}</span><span class="pill">тренд</span><span>${recurring.length}</span></div>
-        <div class="revision-row"><b>% расхождения</b><span class="muted">Нужен книжный остаток на момент ревизии</span><span class="pill">%</span><span>—</span></div>`;
+        <div class="revision-row"><b>TOP недостач</b><span>${listHtml(data.topShortages,'neg','Недостач нет','shortage')}</span><span class="pill">₸</span></div>
+        <div class="revision-row"><b>TOP излишков</b><span>${listHtml(data.topSurpluses,'pos','Излишков нет','surplus')}</span><span class="pill">₸</span></div>
+        <div class="revision-row"><b>Повторялось в минусе</b><span>${listHtml(recurring,'repeat','Повторяющихся недостач нет','recurring')}</span><span class="pill">ревизии</span></div>
+        <div class="revision-row"><b>% расхождения</b><span class="muted">Нужен полный книжный остаток на момент каждой ревизии</span><span class="pill">%</span></div>`;
     }
   }
 
@@ -116,6 +158,16 @@
     if (!response.ok || !data?.success) throw new Error(data?.details || data?.message || `HTTP ${response.status}`);
     return data;
   }
+
+  document.addEventListener('click', event => {
+    const more = event.target.closest('.rev-more');
+    if (!more) return;
+    const extra = document.getElementById(more.dataset.target || '');
+    if (!extra) return;
+    const opening = extra.hidden;
+    extra.hidden = !opening;
+    more.textContent = opening ? 'Скрыть' : `Показать все ${more.dataset.total || ''}`.trim();
+  });
 
   button.addEventListener('click', async () => {
     const select = $('revisionPoint');
@@ -135,7 +187,7 @@
       const stores = data.stores?.length ? data.stores.join(' + ') : (scopes[pointKey] || point);
       const count = Number(data.summary?.revisionsCount || 0);
       if (count > 0) {
-        show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Найдено ревизий: <b>${count}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
+        show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Найдено дат ревизии: <b>${count}</b>, документов: <b>${Number(data.summary?.documentsCount || 0)}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
       } else {
         show('warn', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Соединение работает, но ревизии ещё не сопоставились с полями вашей версии iiko.${diagHtml(data)}`);
       }
