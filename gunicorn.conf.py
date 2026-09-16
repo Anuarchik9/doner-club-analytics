@@ -29,10 +29,13 @@ def post_worker_init(worker):
     from navigation_shell import install_navigation_shell
     from revisions_ui import install_revisions_ui
     from revisions_data_v7 import install_revisions_data_v7
+    from progress_ui import install_progress_ui
 
     install_auth(worker.wsgi)
     install_revisions_data_v7(worker.wsgi)
     # The first registered after-request extension is injected last into the HTML.
+    # Register progress early so its JS executes after the other page extensions.
+    install_progress_ui(worker.wsgi)
     install_revisions_ui(worker.wsgi)
     install_navigation_shell(worker.wsgi)
     install_report_final_polish(worker.wsgi)
