@@ -30,9 +30,13 @@ def post_worker_init(worker):
     from revisions_ui import install_revisions_ui
     from revisions_data_v7 import install_revisions_data_v7
     from progress_ui import install_progress_ui
+    from dashboard_category_readability import install_dashboard_category_readability
 
     install_auth(worker.wsgi)
     install_revisions_data_v7(worker.wsgi)
+    # Register dashboard readability/category guard early so its JS is injected
+    # after the older dashboard extensions and wins any late category redraws.
+    install_dashboard_category_readability(worker.wsgi)
     # The first registered after-request extension is injected last into the HTML.
     # Register progress early so its JS executes after the other page extensions.
     install_progress_ui(worker.wsgi)
