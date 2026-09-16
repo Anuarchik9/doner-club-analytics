@@ -26,6 +26,7 @@ def post_worker_init(worker):
     from trend_label_patch import install_trend_label_patch
     from compact_layout import install_compact_layout
     from report_final_polish import install_report_final_polish
+    from navigation_shell import install_navigation_shell
 
     install_auth(worker.wsgi)
     # The first registered after-request extension is injected last into the HTML.
@@ -45,3 +46,4 @@ def post_worker_init(worker):
     install_speed_patch(worker.wsgi)
     install_chart_hover(worker.wsgi)
     install_preset_controls(worker.wsgi)
+    install_navigation_shell(worker.wsgi)
