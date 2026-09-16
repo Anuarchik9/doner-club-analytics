@@ -27,7 +27,7 @@
     .dc-brand-badge{height:36px;min-width:36px;padding:0 10px;border-radius:12px;border:1px solid #323232;background:linear-gradient(160deg,#111,#090909);display:inline-flex;align-items:center;justify-content:center;gap:6px;color:#f5f5f2;font-size:10px;font-weight:900;letter-spacing:-.01em;box-shadow:0 7px 18px rgba(0,0,0,.22)}
     .dc-brand-badge i{font-style:normal;font-size:15px;line-height:1}
     .dc-brand-badge.yandex i{color:#ff5252}.dc-brand-badge.wolt i{color:#5bc9ff}.dc-brand-badge.glovo i{color:#ffd34d}.dc-brand-badge.choco i{color:#ff9a63}.dc-brand-badge.starter i{color:#a8e063}
-    .dc-brand-badge.kaspi i{color:#ff5555}.dc-brand-badge.cash i{color:#8fe1ad}.dc-brand-badge.card i{color:#9ec7ff}.dc-brand-badge.call i{color:#ffb36b}
+    .dc-brand-badge.kaspi i{color:#ff5555}.dc-brand-badge.cash i{color:#8fe1ad}.dc-brand-badge.paycard i{color:#9ec7ff}.dc-brand-badge.call i{color:#ffb36b}
 
     /* Offline badges use a strict 2×2 grid so a single badge can never stretch across the card. */
     .dc-offline-card{padding-right:42%!important}
@@ -126,7 +126,7 @@
   const offlineBadges = `
     <span class="dc-brand-badge kaspi"><i>K</i>Kaspi QR</span>
     <span class="dc-brand-badge cash"><i>₸</i>Наличные</span>
-    <span class="dc-brand-badge card"><i>▰</i>Карта</span>
+    <span class="dc-brand-badge paycard"><i>▰</i>Карта</span>
     <span class="dc-brand-badge call"><i>☎</i>Call Center</span>`;
 
   function installMixIcons(){
