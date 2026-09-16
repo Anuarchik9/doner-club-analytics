@@ -18,7 +18,7 @@
     .econ-fill{height:100%;background:linear-gradient(90deg,var(--orange),#ff8e5e);border-radius:99px}
     .econ-values{text-align:right;white-space:nowrap;font-size:11px;color:var(--muted)}
     .econ-values b{color:#fff;font-size:12px}
-    .econ-table-wrap{overflow:auto;margin-top:16px}.econ-table{width:100%;border-collapse:collapse;min-width:760px}
+    .econ-table-wrap{overflow:auto;margin-top:16px}.econ-table{width:100%;border-collapse:collapse;min-width:880px}
     .econ-table th{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.06em;padding:10px 8px;border-bottom:1px solid var(--line);text-align:left}
     .econ-table td{padding:11px 8px;border-bottom:1px solid #202020;font-size:12px}.econ-table .num{text-align:right;white-space:nowrap}
     .econ-note{color:#777;font-size:10px;line-height:1.45;margin-top:11px}
@@ -58,7 +58,7 @@
       </section>
       <section class="econ-grid">
         <div class="panel"><h3>Food Cost по категориям</h3><div class="muted">Доля себестоимости в выручке категории</div><div class="econ-list" id="econCategories"><div class="muted">Данные появятся после загрузки</div></div></div>
-        <div class="panel"><h3>Позиции по валовой прибыли</h3><div class="muted">Выручка, себестоимость и маржа</div><div class="econ-table-wrap"><table class="econ-table"><thead><tr><th>Позиция</th><th class="num">Выручка</th><th class="num">Себест.</th><th class="num">Food Cost</th><th class="num">Вал. прибыль</th><th class="num">Маржа</th></tr></thead><tbody id="econProducts"><tr><td colspan="6" class="muted">Данные появятся после загрузки</td></tr></tbody></table></div></div>
+        <div class="panel"><h3>Позиции по валовой прибыли</h3><div class="muted">Выручка, себестоимость и маржа</div><div class="econ-table-wrap"><table class="econ-table"><thead><tr><th>Позиция</th><th class="num">Выручка</th><th class="num">Себест./ед.</th><th class="num">Себест. всего</th><th class="num">Food Cost</th><th class="num">Вал. прибыль</th><th class="num">Маржа</th></tr></thead><tbody id="econProducts"><tr><td colspan="7" class="muted">Данные появятся после загрузки</td></tr></tbody></table></div></div>
       </section>
       <div class="econ-note" id="econNote">Норматив Food Cost пока не задан — показываем фактические значения из iiko без оценки «норма/критично».</div>`;
     anchor.insertAdjacentElement('beforebegin',block);
@@ -71,13 +71,13 @@
     if($('econGrossProfit'))$('econGrossProfit').textContent='…';
     if($('econGrossMargin'))$('econGrossMargin').textContent='…';
     if($('econCategories'))$('econCategories').innerHTML='<div class="muted">Считаем себестоимость…</div>';
-    if($('econProducts'))$('econProducts').innerHTML='<tr><td colspan="6" class="muted">Считаем себестоимость…</td></tr>';
+    if($('econProducts'))$('econProducts').innerHTML='<tr><td colspan="7" class="muted">Считаем себестоимость…</td></tr>';
   }
 
   function failed(message){
     ['econCost','econFoodCost','econGrossProfit','econGrossMargin'].forEach(id=>{if($(id))$(id).textContent='—'});
     if($('econCategories'))$('econCategories').innerHTML='<div class="muted">Не удалось получить Cost из iiko</div>';
-    if($('econProducts'))$('econProducts').innerHTML='<tr><td colspan="6" class="muted">Данные себестоимости недоступны</td></tr>';
+    if($('econProducts'))$('econProducts').innerHTML='<tr><td colspan="7" class="muted">Данные себестоимости недоступны</td></tr>';
     if($('econNote'))$('econNote').textContent=`Food Cost пока не загружен: ${message||'неизвестная ошибка'}`;
   }
 
@@ -98,7 +98,7 @@
     $('econCategories').innerHTML=cats.length?cats.map(x=>`<div class="econ-row"><div class="econ-name" title="${esc(x.name)}">${esc(x.name)}</div><div class="econ-track"><div class="econ-fill" style="width:${Math.max(x.revenue?3:0,Number(x.revenue||0)/max*100)}%"></div></div><div class="econ-values"><b>${pct(x.foodCostPct)}</b><br>${rub(x.cost)} · ${num(x.quantity)} шт.</div></div>`).join(''):'<div class="muted">Нет данных по категориям</div>';
 
     const products=(data.products||[]).slice().sort((a,b)=>Number(b.grossProfit||0)-Number(a.grossProfit||0)).slice(0,20);
-    $('econProducts').innerHTML=products.length?products.map(x=>`<tr><td title="${esc(x.name)}">${esc(x.name)}</td><td class="num">${rub(x.revenue)}</td><td class="num">${rub(x.cost)}</td><td class="num">${pct(x.foodCostPct)}</td><td class="num">${rub(x.grossProfit)}</td><td class="num">${pct(x.grossMarginPct)}</td></tr>`).join(''):'<tr><td colspan="6" class="muted">Нет данных</td></tr>';
+    $('econProducts').innerHTML=products.length?products.map(x=>`<tr><td title="${esc(x.name)}">${esc(x.name)}</td><td class="num">${rub(x.revenue)}</td><td class="num">${rub(x.costPerUnit || (Number(x.quantity||0)?Number(x.cost||0)/Number(x.quantity||0):0))}</td><td class="num">${rub(x.cost)}</td><td class="num">${pct(x.foodCostPct)}</td><td class="num">${rub(x.grossProfit)}</td><td class="num">${pct(x.grossMarginPct)}</td></tr>`).join(''):'<tr><td colspan="7" class="muted">Нет данных</td></tr>';
 
     let note='Food Cost рассчитан как Cost / выручка по данным iikoServer SALES OLAP. Валовая прибыль не учитывает ФОТ, аренду, налоги и прочие постоянные расходы.';
     if(Number(s.positionsWithoutCost||0)>0){
