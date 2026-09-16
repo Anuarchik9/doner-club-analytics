@@ -33,11 +33,12 @@
     {from:'2026-01-31',to:'2026-01-31',date:'31 января 2026',text:'Закрылась точка Манас.'},
     {from:'2026-04-01',to:'2026-04-30',date:'Апрель 2026',text:'Новый дизайн меню от Жазиры.'},
     {from:'2026-05-06',to:'2026-05-06',date:'6 мая 2026',text:'Закрылась точка Сыганак.'},
-    {from:'2026-09-01',to:'2026-09-30',date:'Сентябрь 2026',text:'Открытие новой точки Doner Club на Республике.'},
+    {from:'2026-09-01',to:'2026-09-30',date:'Сентябрь 2026',text:'Открытие новой точки Doner Club на Республике.',point:'republic'},
   ];
 
   const fromInput=document.getElementById('from');
   const toInput=document.getElementById('to');
+  const pointInput=document.getElementById('point');
   const error=document.getElementById('error');
   if(!fromInput||!toInput||!error)return;
 
@@ -50,11 +51,26 @@
   const overlap=(a1,a2,b1,b2)=>a1<=b2&&a2>=b1;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+  function republicSelected(){
+    try {
+      if(window.DCPointSelection?.includesRepublic) return !!window.DCPointSelection.includesRepublic();
+    } catch(_) {}
+    const option=pointInput?.options?.[pointInput.selectedIndex];
+    const text=`${pointInput?.value||''} ${option?.textContent||''}`.toLowerCase();
+    return text.includes('республика')||text.includes('republic');
+  }
+
+  function noteApplies(note){
+    if(!note.point) return true;
+    if(note.point==='republic') return republicSelected();
+    return true;
+  }
+
   function hide(){wrap.classList.remove('show');const list=document.getElementById('periodNotesList');if(list)list.innerHTML='';}
   function render(){
     const a=fromInput.value,b=toInput.value||a;
     if(!a||!b){hide();return;}
-    const matches=NOTES.filter(n=>overlap(a,b,n.from,n.to));
+    const matches=NOTES.filter(n=>overlap(a,b,n.from,n.to)&&noteApplies(n));
     if(!matches.length){hide();return;}
     document.getElementById('periodNotesList').innerHTML=matches.map(n=>`<div class="period-note"><time>${esc(n.date)}</time><div>${esc(n.text)}</div></div>`).join('');
     wrap.classList.add('show');
@@ -65,4 +81,6 @@
   document.getElementById('go')?.addEventListener('click',()=>setTimeout(render,50));
   fromInput.addEventListener('input',hide);
   toInput.addEventListener('input',hide);
+  pointInput?.addEventListener('change',hide);
+  window.addEventListener('dc:points-changed',hide);
 })();
