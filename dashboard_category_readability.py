@@ -16,7 +16,7 @@ def install_dashboard_category_readability(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/dashboard-category-readability.js?v=20260916-2"></script>'
+                tag = '<script src="/static/dashboard-category-readability.js?v=20260916-3"></script>'
                 if "dashboard-category-readability.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
