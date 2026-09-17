@@ -1,18 +1,19 @@
 (() => {
-  if (window.__dcOnlineOfflineHoverFix) return;
-  window.__dcOnlineOfflineHoverFix = true;
+  if (window.__dcOnlineOfflineHoverFixV2) return;
+  window.__dcOnlineOfflineHoverFixV2 = true;
   if (!location.pathname.endsWith('/dashboard-v2.html')) return;
 
   const NS = 'http://www.w3.org/2000/svg';
 
   const style = document.createElement('style');
   style.textContent = `
-    .oo-chart svg{touch-action:pan-y;cursor:crosshair}
-    .oo-hover-capture{fill:transparent;pointer-events:all}
+    .oo-chart svg{touch-action:pan-y}
+    .oo-hit{pointer-events:none!important}
+    .oo-direct-hit{fill:transparent;pointer-events:all;cursor:pointer}
     .oo-hover-guide{stroke:#777;stroke-width:1;stroke-dasharray:4 5;opacity:.65;pointer-events:none}
     .oo-hover-focus{fill:#111;stroke-width:3;pointer-events:none}
     .oo-hover-focus.online{stroke:#4d9fff}.oo-hover-focus.offline{stroke:#ff685e}
-    @media (hover:none){.oo-chart svg{cursor:default}}
+    @media (hover:none){.oo-direct-hit{cursor:default}}
   `;
   document.head.appendChild(style);
 
@@ -31,28 +32,19 @@
   }
 
   function enhanceSvg(svg) {
-    if (!svg || svg.dataset.dcOoHoverFixed === '1') return;
+    if (!svg || svg.dataset.dcOoHoverFixedV2 === '1') return;
+
     const hits = Array.from(svg.querySelectorAll('.oo-hit'));
-    if (!hits.length) return;
-    svg.dataset.dcOoHoverFixed = '1';
+    const onlineDots = Array.from(svg.querySelectorAll('.oo-dot-online'));
+    const offlineDots = Array.from(svg.querySelectorAll('.oo-dot-offline'));
+    if (!hits.length || !onlineDots.length || !offlineDots.length) return;
+
+    svg.dataset.dcOoHoverFixedV2 = '1';
 
     const vb = svg.viewBox?.baseVal;
-    const viewW = vb?.width || 960;
     const viewH = vb?.height || 280;
-    const left = 66;
-    const right = viewW - 20;
     const top = 30;
     const bottom = viewH - 42;
-
-    // Transparent plot-area target: hovering anywhere near a date/month now
-    // resolves to the nearest x point, not only to the tiny midpoint circle.
-    const capture = document.createElementNS(NS, 'rect');
-    capture.setAttribute('class', 'oo-hover-capture');
-    capture.setAttribute('x', String(left));
-    capture.setAttribute('y', String(top));
-    capture.setAttribute('width', String(Math.max(1, right - left)));
-    capture.setAttribute('height', String(Math.max(1, bottom - top)));
-    svg.insertBefore(capture, svg.firstChild);
 
     const guide = document.createElementNS(NS, 'line');
     guide.setAttribute('class', 'oo-hover-guide');
@@ -73,38 +65,41 @@
     focusOffline.style.display = 'none';
     svg.appendChild(focusOffline);
 
-    let lastIndex = -1;
+    const root = svg.closest('.oo-chart');
 
-    function nearestIndex(clientX) {
-      const rect = svg.getBoundingClientRect();
-      if (!rect.width) return -1;
-      const xInSvg = (clientX - rect.left) / rect.width * viewW;
-      let best = 0;
-      let bestDistance = Infinity;
-      hits.forEach((hit, index) => {
-        const cx = Number(hit.getAttribute('cx') || 0);
-        const distance = Math.abs(cx - xInSvg);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = index;
-        }
-      });
-      return best;
+    function placeTooltip(index) {
+      const tooltip = root?.querySelector('.oo-tooltip');
+      const on = onlineDots[index];
+      const off = offlineDots[index];
+      if (!tooltip || !root || (!on && !off)) return;
+
+      const rootRect = root.getBoundingClientRect();
+      const onRect = on?.getBoundingClientRect();
+      const offRect = off?.getBoundingClientRect();
+      const source = onRect || offRect;
+      if (!source || !rootRect.width) return;
+
+      const centerX = source.left + source.width / 2 - rootRect.left;
+      const topY = Math.min(
+        onRect ? onRect.top + onRect.height / 2 : Infinity,
+        offRect ? offRect.top + offRect.height / 2 : Infinity,
+      ) - rootRect.top;
+
+      tooltip.style.left = `${Math.max(80, Math.min(rootRect.width - 80, centerX))}px`;
+      tooltip.style.top = `${Math.max(48, topY)}px`;
     }
 
-    function showAt(index, event) {
-      if (index < 0 || index >= hits.length) return;
+    function show(index, event) {
       const hit = hits[index];
-      const cx = Number(hit.getAttribute('cx') || 0);
+      const on = onlineDots[index];
+      const off = offlineDots[index];
+      if (!hit || (!on && !off)) return;
+
+      const cx = Number((on || off).getAttribute('cx') || 0);
       guide.setAttribute('x1', String(cx));
       guide.setAttribute('x2', String(cx));
       guide.style.display = '';
 
-      // The chart has one blue and one red dot for each data index.
-      const onlineDots = svg.querySelectorAll('.oo-dot-online');
-      const offlineDots = svg.querySelectorAll('.oo-dot-offline');
-      const on = onlineDots[index];
-      const off = offlineDots[index];
       if (on) {
         focusOnline.setAttribute('cx', on.getAttribute('cx') || String(cx));
         focusOnline.setAttribute('cy', on.getAttribute('cy') || String(top));
@@ -116,37 +111,51 @@
         focusOffline.style.display = '';
       }
 
-      // Reuse the chart's own tooltip renderer so values/labels stay exactly
-      // consistent with the data already rendered by online-offline-trends.js.
-      if (lastIndex !== index || event?.type === 'pointerdown' || event?.type === 'click') {
-        dispatchHit(hit, event);
-        lastIndex = index;
-      }
+      dispatchHit(hit, event);
+      placeTooltip(index);
     }
 
-    function move(event) {
-      showAt(nearestIndex(event.clientX), event);
-    }
-
-    svg.addEventListener('pointermove', move, {passive: true});
-    svg.addEventListener('mousemove', move, {passive: true});
-    svg.addEventListener('pointerdown', event => showAt(nearestIndex(event.clientX), event), {passive: true});
-    svg.addEventListener('click', event => showAt(nearestIndex(event.clientX), event));
-    svg.addEventListener('pointerleave', () => {
-      lastIndex = -1;
+    function hide() {
       guide.style.display = 'none';
       focusOnline.style.display = 'none';
       focusOffline.style.display = 'none';
+      const tooltip = root?.querySelector('.oo-tooltip');
+      if (tooltip) tooltip.style.display = 'none';
+    }
+
+    // Create the hover areas exactly on top of the visible blue/red points.
+    // This avoids the old behaviour where the whole plot width selected the
+    // nearest date and, on wide charts, the pointer had to travel far past a dot.
+    hits.forEach((_, index) => {
+      [onlineDots[index], offlineDots[index]].forEach(dot => {
+        if (!dot) return;
+        const target = document.createElementNS(NS, 'circle');
+        target.setAttribute('class', 'oo-direct-hit');
+        target.setAttribute('cx', dot.getAttribute('cx') || '0');
+        target.setAttribute('cy', dot.getAttribute('cy') || '0');
+        target.setAttribute('r', '13');
+        target.dataset.index = String(index);
+        svg.appendChild(target);
+
+        const activate = event => show(index, event);
+        target.addEventListener('pointerenter', activate);
+        target.addEventListener('pointermove', activate, {passive:true});
+        target.addEventListener('pointerdown', activate, {passive:true});
+        target.addEventListener('click', activate);
+        target.addEventListener('pointerleave', hide);
+      });
     });
+
+    svg.addEventListener('pointerleave', hide);
   }
 
   function scan() {
     document.querySelectorAll('.oo-chart svg').forEach(enhanceSvg);
   }
 
-  const observer = new MutationObserver(() => scan());
-  observer.observe(document.documentElement, {childList: true, subtree: true});
+  const observer = new MutationObserver(scan);
+  observer.observe(document.documentElement, {childList:true, subtree:true});
   scan();
-  setTimeout(scan, 250);
-  setTimeout(scan, 900);
+  setTimeout(scan, 200);
+  setTimeout(scan, 800);
 })();
