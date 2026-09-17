@@ -16,7 +16,7 @@ def install_period_notes(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/period-notes.js?v=20260917-2"></script>'
+                tag = '<script src="/static/period-notes.js?v=20260917-3"></script>'
                 if "period-notes.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
