@@ -1,10 +1,9 @@
 (() => {
-  if (window.__dcDashboardCategoryReadability) return;
-  window.__dcDashboardCategoryReadability = true;
+  if (window.__dcDashboardCategoryReadabilityV2) return;
+  window.__dcDashboardCategoryReadabilityV2 = true;
 
   const style = document.createElement('style');
   style.textContent = `
-    /* Use the available desktop width instead of leaving large dead margins. */
     .wrap{max-width:1760px!important;padding-left:28px!important;padding-right:28px!important}
     body{font-size:16px!important}
     .hero h1{font-size:58px!important;line-height:1.04!important}
@@ -24,18 +23,17 @@
     .value{font-size:42px!important}
     .sub{font-size:12.5px!important;line-height:1.55!important}
 
-    /* Sales categories: larger text and a wider name column. */
     #categoryList{gap:15px!important}
     #categoryList .cat-row{grid-template-columns:minmax(240px,350px) minmax(340px,1fr) 145px!important;gap:20px!important;align-items:center!important}
     #categoryList .cat-name strong{font-size:16px!important;line-height:1.3!important}
-    #categoryList .cat-name>span:not(.dc-other-breakdown){font-size:12.5px!important;line-height:1.45!important;margin-top:4px!important}
-    /* Old scripts may still write this legacy helper; keep it hidden and render the canonical list below. */
-    #categoryList .dc-other-breakdown{display:none!important}
+    #categoryList .cat-name>span{font-size:12.5px!important;line-height:1.45!important;margin-top:4px!important}
     #categoryList .dc-other-audit{display:block;margin-top:6px;color:#c8c8c1;font-size:12px;line-height:1.5;max-width:760px}
     #categoryList .dc-other-preview{display:inline}
-    #categoryList .dc-other-more{appearance:none;border:0;background:transparent;color:#ff8b5e;font:inherit;font-weight:850;padding:0 2px;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+    #categoryList .dc-other-more{appearance:none;border:0;background:transparent;color:#ff8b5e;font:inherit;font-weight:850;padding:0 2px;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;pointer-events:auto;position:relative;z-index:3}
     #categoryList .dc-other-more:hover{color:#fff}
-    #categoryList .dc-other-full{margin-top:9px;padding:11px 12px;border:1px solid #343434;border-radius:12px;background:#0d0d0d;display:grid;gap:7px;max-height:250px;overflow:auto}
+    #categoryList .dc-other-more[aria-expanded="true"]{font-size:0!important}
+    #categoryList .dc-other-more[aria-expanded="true"]::after{content:'свернуть';font-size:12px;font-weight:850}
+    #categoryList .dc-other-full{margin-top:9px;padding:11px 12px;border:1px solid #343434;border-radius:12px;background:#0d0d0d;display:grid;gap:7px;max-height:280px;overflow:auto}
     #categoryList .dc-other-full[hidden]{display:none!important}
     #categoryList .dc-other-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;padding-bottom:6px;border-bottom:1px solid #222}
     #categoryList .dc-other-item:last-child{border-bottom:0;padding-bottom:0}
@@ -44,7 +42,6 @@
     #categoryList .cat-share{font-size:15px!important;font-weight:900!important}
     #categoryList .track{height:9px!important}
 
-    /* Meat + doner-size analytics should be readable from a normal desktop distance. */
     .doner-mix-grid{gap:18px!important}
     .meat-card{padding:19px!important}
     .meat-card small{font-size:12.5px!important}
@@ -88,15 +85,27 @@
     return n===word || n.startsWith(`${word} `) || n.startsWith(`${word}-`) || n.startsWith(`${word}(`);
   }
 
+  function isDrinkName(name){
+    const n=String(name||'').trim().toLowerCase();
+    return (
+      n.includes('pepsi') || n.includes('пепси') ||
+      n.includes('айран') || n.includes('вода') || n.includes('сок') ||
+      n.includes('чай') || n.includes('кофе') || n.includes('напит') ||
+      n.includes('mirinda') || n.includes('миринда') ||
+      startsProduct(n,'кинза') || startsProduct(n,'kinza') ||
+      startsProduct(n,'ава') || startsProduct(n,'ava') ||
+      startsProduct(n,'пиала') || startsProduct(n,'piala') ||
+      startsProduct(n,'да-да') || startsProduct(n,'да да') ||
+      startsProduct(n,'da-da') || startsProduct(n,'da da') || startsProduct(n,'dada')
+    );
+  }
+
   function categoryOf(name){
     const n=String(name||'').trim().toLowerCase();
     if(n.includes('комбо')||n.includes('combo')||n.includes('go!')) return 'Комбо';
     if(n.includes('батон')||n.includes('baton')) return 'Батоны';
     if(n.includes('донер')||n.includes('doner')) return 'Донеры';
-    if(
-      n.includes('pepsi')||n.includes('айран')||n.includes('вода')||n.includes('сок')||n.includes('чай')||n.includes('кофе')||n.includes('напит')||
-      n.includes('mirinda')||n.includes('миринда')||startsProduct(n,'кинза')||startsProduct(n,'ава')
-    ) return 'Напитки';
+    if(isDrinkName(n)) return 'Напитки';
     if(n.includes('фри')||n.includes('наггет')||n.includes('картоф')||n.includes('закуск')||n.includes('стрипс')||n.includes('strip')) return 'Гарниры и закуски';
     if(n.includes('соус')||n.includes('халап')||n.includes('сыр')||n.includes('добав')) return 'Соусы и добавки';
     return 'Другие позиции';
@@ -114,64 +123,53 @@
     return Object.values(groups).sort((a,b)=>b.revenue-a.revenue);
   }
 
-  function otherAuditHtml(list){
+  function otherAuditHtml(list,open=false){
     const sorted=list.slice().sort((a,b)=>Number(b.revenue||0)-Number(a.revenue||0));
     const preview=sorted.slice(0,4);
     const rest=sorted.slice(4);
     const previewText=preview.map(p=>esc(p.name)).join(' · ');
     const restHtml=rest.map(p=>`<div class="dc-other-item"><b>${esc(p.name)}</b><span>${nf.format(Number(p.quantity||0))} ед. · ${rub(p.revenue)}</span></div>`).join('');
-    return `<span class="dc-other-preview">Внутри: ${previewText}${rest.length?' · ':''}</span>${rest.length?`<button type="button" class="dc-other-more" aria-expanded="false">ещё ${rest.length}</button><div class="dc-other-full" hidden>${restHtml}</div>`:''}`;
+    return `<div class="dc-other-audit"><span class="dc-other-preview">Внутри: ${previewText}${rest.length?' · ':''}</span>${rest.length?`<button type="button" class="dc-other-more" aria-expanded="${open?'true':'false'}">ещё ${rest.length}</button><div class="dc-other-full" ${open?'':'hidden'}>${restHtml}</div>`:''}</div>`;
   }
 
-  function otherKey(list){
-    return list.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ru')).map(p=>`${p.name}|${Number(p.quantity||0)}|${Number(p.revenue||0)}`).join('¦');
+  function numberFromText(text){
+    const s=String(text||'').replace(/\s/g,'').replace(/[^0-9,.-]/g,'').replace(',','.');
+    return Number(s)||0;
+  }
+
+  function domMatches(root,arr){
+    const rows=[...root.querySelectorAll(':scope > .cat-row')];
+    if(rows.length!==arr.length) return false;
+    for(let i=0;i<arr.length;i++){
+      const row=rows[i];
+      if((row.querySelector('.cat-name strong')?.textContent||'').trim()!==arr[i].name) return false;
+      if(Math.round(numberFromText(row.querySelector('.cat-share')?.textContent))!==Math.round(arr[i].revenue)) return false;
+      const qtyText=(row.querySelector('.cat-name>span')?.textContent||'').split('ед.')[0];
+      if(Math.abs(numberFromText(qtyText)-arr[i].quantity)>0.05) return false;
+      if(arr[i].name==='Другие позиции' && !row.querySelector('.dc-other-audit')) return false;
+    }
+    return true;
   }
 
   let rendering=false;
   let queued=false;
+
   function renderCanonical(){
     if(rendering) return;
     const root=document.getElementById('categoryList');
     const arr=expectedGroups();
-    if(!root||!arr.length) return;
+    if(!root||!arr.length||domMatches(root,arr)) return;
 
-    const wanted=arr.map(x=>x.name);
-    const current=[...root.querySelectorAll(':scope > .cat-row .cat-name strong')].map(x=>(x.textContent||'').trim());
-    const wrongNames=current.length!==wanted.length || current.some((x,i)=>x!==wanted[i]);
-    const otherText=[...root.querySelectorAll(':scope > .cat-row')]
-      .find(r=>(r.querySelector('.cat-name strong')?.textContent||'').trim()==='Другие позиции')?.textContent?.toLowerCase()||'';
-    const leaked=otherText.includes('батон')||otherText.includes('baton')||otherText.includes('кинза')||otherText.includes('миринда')||otherText.includes('стрипс');
-    if(!wrongNames && !leaked) return;
-
+    const wasOpen=root.querySelector('.dc-other-more[aria-expanded="true"]')!==null;
     rendering=true;
     const total=arr.reduce((s,x)=>s+x.revenue,0)||1;
     const max=Math.max(...arr.map(x=>x.revenue),1);
     root.innerHTML=arr.map(x=>{
       const share=x.revenue/total*100;
-      const details=x.name==='Другие позиции'
-        ? `<span class="dc-other-breakdown"></span><div class="dc-other-audit" data-key="${esc(otherKey(x.products))}">${otherAuditHtml(x.products)}</div>`
-        : '';
+      const details=x.name==='Другие позиции'?otherAuditHtml(x.products,wasOpen):'';
       return `<div class="cat-row"><div class="cat-name"><strong>${esc(x.name)}</strong><span>${nf.format(x.quantity)} ед. · ${nf.format(share)}% выручки</span>${details}</div><div class="track"><div class="fill" style="width:${Math.max(2,x.revenue/max*100)}%"></div></div><div class="cat-share">${money.format(x.revenue)} ₸</div></div>`;
     }).join('');
     rendering=false;
-  }
-
-  function sanitizeOther(){
-    const root=document.getElementById('categoryList');
-    if(!root) return;
-    const row=[...root.querySelectorAll(':scope > .cat-row')].find(r=>(r.querySelector('.cat-name strong')?.textContent||'').trim()==='Другие позиции');
-    if(!row) return;
-    const otherProducts=products().filter(p=>categoryOf(p.name)==='Другие позиции').sort((a,b)=>Number(b.revenue||0)-Number(a.revenue||0));
-    const key=otherKey(otherProducts);
-    const box=row.querySelector('.cat-name');
-    let legacy=row.querySelector('.dc-other-breakdown');
-    if(!legacy){legacy=document.createElement('span');legacy.className='dc-other-breakdown';box?.appendChild(legacy)}
-    let audit=row.querySelector('.dc-other-audit');
-    if(!audit){audit=document.createElement('div');audit.className='dc-other-audit';box?.appendChild(audit)}
-    if(audit && audit.dataset.key!==key){
-      audit.dataset.key=key;
-      audit.innerHTML=otherAuditHtml(otherProducts);
-    }
   }
 
   function isTrueDoner(name){
@@ -258,7 +256,6 @@
 
   function enforce(){
     renderCanonical();
-    sanitizeOther();
     renderDonerMix();
     clarifyDonerBlock();
   }
@@ -270,29 +267,30 @@
   }
 
   const categoryRoot=document.getElementById('categoryList');
-  if(categoryRoot){
-    new MutationObserver(queue).observe(categoryRoot,{childList:true,subtree:true});
-    categoryRoot.addEventListener('click',event=>{
-      const button=event.target.closest('.dc-other-more');
-      if(!button) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const full=button.nextElementSibling;
-      if(!full?.classList.contains('dc-other-full')) return;
-      const opening=full.hidden;
-      full.hidden=!opening;
-      button.setAttribute('aria-expanded',String(opening));
-      const count=full.querySelectorAll('.dc-other-item').length;
-      button.textContent=opening?'свернуть':`ещё ${count}`;
-    });
-  }
+  if(categoryRoot) new MutationObserver(queue).observe(categoryRoot,{childList:true,subtree:true});
+
+  document.addEventListener('click',event=>{
+    const button=event.target.closest?.('.dc-other-more');
+    if(!button) return;
+    const root=document.getElementById('categoryList');
+    if(!root?.contains(button)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    const full=button.parentElement?.querySelector('.dc-other-full');
+    if(!full) return;
+    const opening=full.hidden;
+    full.hidden=!opening;
+    button.setAttribute('aria-expanded',String(opening));
+  },true);
+
   const donerRoot=document.getElementById('donerMixBlock');
   if(donerRoot) new MutationObserver(queue).observe(donerRoot,{childList:true,subtree:true});
 
   document.getElementById('go')?.addEventListener('click',()=>{
-    [120,350,700,1200,2000,3500,6000].forEach(ms=>setTimeout(enforce,ms));
+    [80,250,600,1100,1800,3000,5000].forEach(ms=>setTimeout(enforce,ms));
   });
-  document.querySelector('.presets')?.addEventListener('click',()=>setTimeout(enforce,300));
-  document.querySelectorAll('.report-mode-btn').forEach(btn=>btn.addEventListener('click',()=>setTimeout(enforce,300)));
-  [400,900,1600,2600].forEach(ms=>setTimeout(enforce,ms));
+  document.querySelector('.presets')?.addEventListener('click',()=>setTimeout(enforce,250));
+  document.querySelectorAll('.report-mode-btn').forEach(btn=>btn.addEventListener('click',()=>setTimeout(enforce,250)));
+  [100,350,800,1500,2600].forEach(ms=>setTimeout(enforce,ms));
 })();
