@@ -36,6 +36,7 @@ def post_worker_init(worker):
     from custom_select import install_custom_select
     from mobile_responsive_fix import install_mobile_responsive_fix
     from multi_point import install_multi_point
+    from archived_points import install_archived_points
 
     # Extend the dashboard allowlist before auth routes start serving requests.
     # Passwords are still validated directly by iikoServer.
@@ -74,6 +75,9 @@ def post_worker_init(worker):
     # Install after team-meal so combined sales-mix requests preserve its
     # classification patch, then expose the checkbox point selector.
     install_multi_point(worker.wsgi)
+    # Closed points can disappear from the current iikoCloud inventory API even
+    # though their historical sales remain available in iikoServer OLAP.
+    install_archived_points(worker.wsgi)
     install_speed_patch(worker.wsgi)
     install_chart_hover(worker.wsgi)
     install_preset_controls(worker.wsgi)
