@@ -1,20 +1,111 @@
 from collections import defaultdict
+import re
 
 import app as core
 import sales_channel
 
 
-ARCHIVED_TOKENS = ("манас", "manas", "сыганак", "syganak", "syganak")
+ARCHIVED_TOKENS = (
+    "манас", "manas",
+    "сыганак", "сығанақ", "syganak", "syganaq",
+)
+
+
+def _compact(value):
+    text = str(value or "").strip().lower().replace("ё", "е")
+    return re.sub(r"[^0-9a-zа-яәіңғүұқөһ]+", "", text)
+
+
+def _latinize(value):
+    text = str(value or "").strip().lower().replace("ё", "е")
+    table = {
+        "а": "a", "ә": "a", "б": "b", "в": "v", "г": "g", "ғ": "g",
+        "д": "d", "е": "e", "ж": "zh", "з": "z", "и": "i", "й": "i",
+        "к": "k", "қ": "q", "л": "l", "м": "m", "н": "n", "ң": "n",
+        "о": "o", "ө": "o", "п": "p", "р": "r", "с": "s", "т": "t",
+        "у": "u", "ұ": "u", "ү": "u", "ф": "f", "х": "h", "һ": "h",
+        "ц": "c", "ч": "ch", "ш": "sh", "щ": "sh", "ы": "y", "і": "i",
+        "ъ": "", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    }
+    result = "".join(table.get(char, char) for char in text)
+    return re.sub(r"[^0-9a-z]+", "", result)
+
+
+def _archive_kind(point):
+    compact = _compact(point)
+    latin = _latinize(point)
+    if any(token in compact for token in ("манас", "manas")) or "manas" in latin:
+        return "manas"
+    if (
+        any(token in compact for token in ("сыганак", "сығанақ", "syganak", "syganaq"))
+        or any(token in latin for token in ("syganak", "syganaq"))
+    ):
+        return "syganak"
+    return None
 
 
 def _is_archived_point(point):
-    text = str(point or "").strip().lower()
-    return any(token in text for token in ARCHIVED_TOKENS) and "||" not in text
+    return "||" not in str(point or "") and _archive_kind(point) is not None
+
+
+def _department_matches(kind, department):
+    haystacks = []
+    for field in ("code", "name"):
+        raw = department.get(field) or ""
+        haystacks.extend((_compact(raw), _latinize(raw)))
+
+    if kind == "manas":
+        aliases = ("манас", "manas")
+    else:
+        aliases = ("сыганак", "сығанақ", "syganak", "syganaq")
+
+    return any(alias in hay for hay in haystacks for alias in aliases)
+
+
+def _find_archived_department(point, departments):
+    # First keep the standard iiko matcher: if code/name is identical it is safest.
+    department = core.find_iiko_server_department(point, departments)
+    if department:
+        return department
+
+    # Closed points can have a Cyrillic name in iikoCloud and a Latin code/name in
+    # iikoServer. Match those aliases explicitly (Сыганак <-> Syganak, Манас <-> Manas).
+    kind = _archive_kind(point)
+    if not kind:
+        return None
+    for item in departments:
+        if _department_matches(kind, item):
+            return item
+    return None
 
 
 def _date_value(value):
     text = str(value or "")
     return text[:10] if len(text) >= 10 else None
+
+
+def _query_daily(base_url, token, date_from, date_to, department_id):
+    return sales_channel._olap_request(
+        base_url,
+        token,
+        date_from,
+        date_to,
+        department_id,
+        ["OpenDate.Typed"],
+        ["DishDiscountSumInt", "DishAmountInt", "UniqOrderId"],
+    )
+
+
+def _query_products(base_url, token, date_from, date_to, department_id):
+    return sales_channel._olap_request(
+        base_url,
+        token,
+        date_from,
+        date_to,
+        department_id,
+        ["OpenDate.Typed", "DishId", "DishName"],
+        ["DishDiscountSumInt", "DishAmountInt"],
+    )
 
 
 def _archived_from_server(point, date_from, date_to):
@@ -23,29 +114,32 @@ def _archived_from_server(point, date_from, date_to):
     try:
         base_url, token = core.iiko_server_auth()
         departments = core.iiko_server_departments(base_url, token)
-        department = core.find_iiko_server_department(point, departments)
+        department = _find_archived_department(point, departments)
         if not department:
-            raise ValueError(f"Point '{point}' not found in iikoServer departments")
+            visible = [
+                f"{d.get('code') or '—'} / {d.get('name') or '—'}"
+                for d in departments
+                if d.get("code") or d.get("name")
+            ]
+            raise ValueError(
+                f"Архивная точка '{point}' не найдена среди подразделений iikoServer. "
+                f"Доступные подразделения: {', '.join(visible[:30])}"
+            )
 
         department_id = department.get("id")
-        product_rows = sales_channel._olap_request(
-            base_url,
-            token,
-            date_from,
-            date_to,
-            department_id,
-            ["OpenDate.Typed", "DishId", "DishName"],
-            ["DishDiscountSumInt", "DishAmountInt"],
-        )
-        daily_rows = sales_channel._olap_request(
-            base_url,
-            token,
-            date_from,
-            date_to,
-            department_id,
-            ["OpenDate.Typed"],
-            ["DishDiscountSumInt", "DishAmountInt", "UniqOrderId"],
-        )
+        if not department_id:
+            raise ValueError(f"У подразделения '{department.get('name') or point}' нет iikoServer id")
+
+        # Revenue/checks are the essential historical layer. Load them first so a
+        # product-level OLAP limitation cannot make the whole old point unavailable.
+        daily_rows = _query_daily(base_url, token, date_from, date_to, department_id)
+
+        product_warning = None
+        try:
+            product_rows = _query_products(base_url, token, date_from, date_to, department_id)
+        except Exception as error:
+            product_rows = []
+            product_warning = f"Детализация по товарам временно недоступна: {error}"
 
         products_map = {}
         for row in product_rows:
@@ -111,6 +205,13 @@ def _archived_from_server(point, date_from, date_to):
         checks = sum(item["documentsCount"] for item in daily_series)
         days_count = len(all_dates)
 
+        note = (
+            "Исторические данные закрытой точки загружены из iikoServer OLAP, "
+            "потому что текущий inventory API iikoCloud может не отдавать документы закрытых подразделений."
+        )
+        if product_warning:
+            note += " " + product_warning
+
         payload = {
             "success": True,
             "source": "iikoServer OLAP historical fallback",
@@ -135,9 +236,9 @@ def _archived_from_server(point, date_from, date_to):
             "topByQuantity": sorted(products, key=lambda x: x["quantity"], reverse=True)[:20],
             "products": products,
             "warnings": {
-                "nomenclature": None,
+                "nomenclature": product_warning,
                 "documentDetails": [],
-                "note": "Исторические данные закрытой точки загружены из iikoServer OLAP, потому что текущий inventory API iikoCloud может не отдавать документы закрытых подразделений.",
+                "note": note,
             },
             "performance": {"detailWorkers": 0, "detailsRequested": 0, "detailsLoaded": 0},
             "cache": {"hit": False, "ttlSeconds": core.ANALYTICS_TTL_SECONDS},
@@ -162,22 +263,18 @@ def install_archived_points(app):
         if not _is_archived_point(point):
             return original_build_analytics(point, date_from, date_to)
 
-        try:
-            payload, error_payload, status = original_build_analytics(point, date_from, date_to)
-            if payload is not None and not error_payload:
-                return payload, error_payload, status
-        except Exception:
-            pass
-
+        # Archived branches should never depend on the current iikoCloud inventory
+        # tree. Go straight to iikoServer, where historical SALES OLAP is kept.
         try:
             return _archived_from_server(point, date_from, date_to)
         except Exception as error:
             return None, {
                 "success": False,
-                "message": "Не удалось получить исторические данные закрытой точки из iikoServer.",
+                "message": "Исторические данные этой точки пока не удалось получить из iikoServer.",
                 "details": str(error),
                 "archivedPoint": True,
-            }, 503
+                "point": point,
+            }, 409
 
     core.build_analytics = build_analytics_with_archive
 
@@ -191,7 +288,7 @@ def install_archived_points(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/point-archive-polish.js?v=20260917-1"></script>'
+                tag = '<script src="/static/point-archive-polish.js?v=20260917-2"></script>'
                 if "point-archive-polish.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
