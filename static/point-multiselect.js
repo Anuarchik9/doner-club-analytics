@@ -10,6 +10,9 @@
   const style = document.createElement('style');
   style.textContent = `
     .dc-point-native{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;clip:rect(0 0 0 0)!important}
+    /* The point field is owned only by this multi-select. If an older/generic
+       selector appears because of script timing or browser cache, hide it. */
+    #point ~ .dc-select-trigger{display:none!important}
     .dc-point-trigger{width:100%;height:52px;border:1px solid #333;border-radius:12px;background:#0b0b0b;color:#fff;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font:inherit;font-size:15px;font-weight:800;text-align:left;transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
     .dc-point-trigger:hover{border-color:#555;background:#0e0e0e}.dc-point-trigger[aria-expanded="true"]{border-color:var(--orange,#ff5a1f);box-shadow:0 0 0 3px rgba(255,90,31,.14)}
     .dc-point-trigger-value{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-point-trigger svg{width:20px;height:20px;flex:0 0 20px;color:#aaa;transition:transform .15s ease}.dc-point-trigger[aria-expanded="true"] svg{transform:rotate(180deg);color:#ff9b73}
@@ -39,6 +42,26 @@
     return low.includes('основное подразделение') || low === 'основное подразделение';
   };
   const realOptions = () => Array.from(select.options).filter(o => !o.dataset.dcMultiSynthetic && !technical(o.textContent));
+
+  function purgeCompetingTriggers(){
+    const field = select.closest('.field') || select.parentElement;
+    if (!field) return;
+
+    // Mark the point field as intentionally handled so the generic custom-select
+    // never enhances it later, even if it loads after this script.
+    select.dataset.dcSelectEnhanced = '1';
+
+    if (select._dcSelectTrigger && select._dcSelectTrigger !== trigger) {
+      try { select._dcSelectTrigger.remove(); } catch (_) {}
+      select._dcSelectTrigger = null;
+    }
+    field.querySelectorAll('.dc-select-trigger').forEach(node => {
+      if (node !== trigger) node.remove();
+    });
+    field.querySelectorAll('.dc-point-trigger').forEach(node => {
+      if (node !== trigger) node.remove();
+    });
+  }
 
   function cleanupNativeOptions(){
     syncing = true;
@@ -97,6 +120,7 @@
       }
     } finally { syncing = false; }
     if (trigger) trigger.querySelector('.dc-point-trigger-value').textContent = summaryText();
+    purgeCompetingTriggers();
     if (dispatch) {
       select.dispatchEvent(new Event('input', {bubbles:true}));
       select.dispatchEvent(new Event('change', {bubbles:true}));
@@ -162,19 +186,14 @@
   }
 
   function enhance(){
-    if (select.dataset.dcPointMultiEnhanced === '1') return;
+    if (select.dataset.dcPointMultiEnhanced === '1') {
+      purgeCompetingTriggers();
+      return;
+    }
     if (!realOptions().length) return;
     select.dataset.dcPointMultiEnhanced = '1';
 
-    // If the generic custom-select already enhanced this field, retire only its
-    // trigger. The native select remains the compatibility source for old code.
-    if (select._dcSelectTrigger) {
-      try { select._dcSelectTrigger.remove(); } catch (_) {}
-      select._dcSelectTrigger = null;
-    }
-    const siblingGeneric = select.nextElementSibling;
-    if (siblingGeneric?.classList?.contains('dc-select-trigger')) siblingGeneric.remove();
-
+    purgeCompetingTriggers();
     select.classList.add('dc-point-native','dc-select-native');
     ensureSelection();
 
@@ -197,6 +216,7 @@
       panel.classList.contains('open') ? closePanel() : openPanel();
     });
     trigger.querySelector('.dc-point-trigger-value').textContent = summaryText();
+    purgeCompetingTriggers();
     syncNative(false);
   }
 
@@ -220,6 +240,11 @@
   });
   optionObserver.observe(select,{childList:true,subtree:true,characterData:true});
 
+  const field = select.closest('.field') || select.parentElement;
+  if (field) {
+    new MutationObserver(() => purgeCompetingTriggers()).observe(field,{childList:true});
+  }
+
   window.DCPointSelection = {
     values: () => Array.from(selected),
     labels,
@@ -238,4 +263,5 @@
   enhance();
   setTimeout(enhance,150);
   setTimeout(enhance,600);
+  setTimeout(purgeCompetingTriggers,1200);
 })();
