@@ -10,6 +10,14 @@
       z-index:3!important;
       cursor:pointer!important;
     }
+    #categoryList .dc-other-more[aria-expanded="true"]{
+      font-size:0!important;
+    }
+    #categoryList .dc-other-more[aria-expanded="true"]::after{
+      content:'свернуть';
+      font-size:12px;
+      font-weight:850;
+    }
     #categoryList .dc-other-full{
       margin-top:9px;
       padding:11px 12px;
@@ -154,8 +162,9 @@
     new MutationObserver(queue).observe(root,{childList:true,subtree:true});
   }
 
-  // Capture-phase delegation makes the expander work even when the category rows
-  // are rebuilt dynamically by other dashboard scripts.
+  // Handle this in capture phase and only change attributes. Changing the
+  // button text node used to wake category MutationObservers, which rebuilt
+  // the row immediately and made the panel look like it opened and closed.
   document.addEventListener('click',event=>{
     const button=event.target.closest?.('.dc-other-more');
     if(!button) return;
@@ -171,8 +180,6 @@
     const opening=full.hidden;
     full.hidden=!opening;
     button.setAttribute('aria-expanded',String(opening));
-    const count=full.querySelectorAll('.dc-other-item').length;
-    button.textContent=opening?'свернуть':`ещё ${count}`;
   },true);
 
   function enforce(){
