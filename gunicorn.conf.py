@@ -38,6 +38,7 @@ def post_worker_init(worker):
     from multi_point import install_multi_point
     from archived_points import install_archived_points
     from point_visibility import install_point_visibility
+    from online_offline_trends import install_online_offline_trends
 
     # Extend the dashboard allowlist before auth routes start serving requests.
     # Passwords are still validated directly by iikoServer.
@@ -79,6 +80,9 @@ def post_worker_init(worker):
     # Install after team-meal so combined sales-mix requests preserve its
     # classification patch, then expose the checkbox point selector.
     install_multi_point(worker.wsgi)
+    # Online/offline trend API uses the already-patched multi-point department
+    # lookup and OLAP request helpers, so combined-point charts work too.
+    install_online_offline_trends(worker.wsgi)
     # Closed points can disappear from the current iikoCloud inventory API even
     # though their historical sales remain available in iikoServer OLAP.
     install_archived_points(worker.wsgi)
