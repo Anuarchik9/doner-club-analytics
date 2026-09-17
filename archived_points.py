@@ -44,8 +44,41 @@ def _archive_kind(point):
     return None
 
 
+def _resolve_archived_point(point):
+    """Return (kind, lookup_name) even when dashboard sends an opaque iiko code.
+
+    The point selector stores option.value as department code and option.text as the
+    human name. Closed branches can therefore arrive here as a code that contains
+    neither 'Сыганак' nor 'Манас'. Resolve that code through the already-loaded
+    iikoCloud department tree before deciding whether this is an archived branch.
+    """
+    raw = str(point or "").strip()
+    if "||" in raw:
+        return None, raw
+
+    direct_kind = _archive_kind(raw)
+    if direct_kind:
+        return direct_kind, raw
+
+    try:
+        department, _ = core.find_department(raw)
+    except Exception:
+        department = None
+
+    if department:
+        name = str(department.get("name") or "").strip()
+        code = str(department.get("code") or "").strip()
+        kind = _archive_kind(f"{name} {code}")
+        if kind:
+            # Prefer the human name for matching the historical iikoServer branch.
+            return kind, name or code or raw
+
+    return None, raw
+
+
 def _is_archived_point(point):
-    return "||" not in str(point or "") and _archive_kind(point) is not None
+    kind, _ = _resolve_archived_point(point)
+    return kind is not None
 
 
 def _department_matches(kind, department):
@@ -85,15 +118,28 @@ def _date_value(value):
 
 
 def _query_daily(base_url, token, date_from, date_to, department_id):
-    return sales_channel._olap_request(
-        base_url,
-        token,
-        date_from,
-        date_to,
-        department_id,
-        ["OpenDate.Typed"],
+    """Load the essential historical series with graceful OLAP-field fallback."""
+    attempts = (
         ["DishDiscountSumInt", "DishAmountInt", "UniqOrderId"],
+        ["DishDiscountSumInt", "UniqOrderId"],
+        ["DishDiscountSumInt"],
     )
+    last_error = None
+    for aggregates in attempts:
+        try:
+            rows = sales_channel._olap_request(
+                base_url,
+                token,
+                date_from,
+                date_to,
+                department_id,
+                ["OpenDate.Typed"],
+                aggregates,
+            )
+            return rows, aggregates
+        except Exception as error:
+            last_error = error
+    raise last_error
 
 
 def _query_products(base_url, token, date_from, date_to, department_id):
@@ -130,9 +176,11 @@ def _archived_from_server(point, date_from, date_to):
         if not department_id:
             raise ValueError(f"У подразделения '{department.get('name') or point}' нет iikoServer id")
 
-        # Revenue/checks are the essential historical layer. Load them first so a
-        # product-level OLAP limitation cannot make the whole old point unavailable.
-        daily_rows = _query_daily(base_url, token, date_from, date_to, department_id)
+        # Revenue is the essential historical layer. Some older iiko installations
+        # reject newer quantity/check aggregate fields, so retry with a smaller set.
+        daily_rows, daily_aggregates = _query_daily(
+            base_url, token, date_from, date_to, department_id
+        )
 
         product_warning = None
         try:
@@ -209,6 +257,10 @@ def _archived_from_server(point, date_from, date_to):
             "Исторические данные закрытой точки загружены из iikoServer OLAP, "
             "потому что текущий inventory API iikoCloud может не отдавать документы закрытых подразделений."
         )
+        if daily_aggregates == ["DishDiscountSumInt"]:
+            note += " Для старого периода iikoServer отдал только выручку; количество и число чеков недоступны в этом OLAP-срезе."
+        elif "DishAmountInt" not in daily_aggregates:
+            note += " Для старого периода iikoServer не отдал количество позиций; выручка и чеки доступны."
         if product_warning:
             note += " " + product_warning
 
@@ -260,20 +312,24 @@ def install_archived_points(app):
     original_build_analytics = core.build_analytics
 
     def build_analytics_with_archive(point, date_from, date_to):
-        if not _is_archived_point(point):
+        kind, resolved_point = _resolve_archived_point(point)
+        if not kind:
             return original_build_analytics(point, date_from, date_to)
 
         # Archived branches should never depend on the current iikoCloud inventory
-        # tree. Go straight to iikoServer, where historical SALES OLAP is kept.
+        # sales-document endpoint. Resolve the visible branch name from its code and
+        # go straight to iikoServer, where historical SALES OLAP is kept.
         try:
-            return _archived_from_server(point, date_from, date_to)
+            return _archived_from_server(resolved_point, date_from, date_to)
         except Exception as error:
             return None, {
                 "success": False,
                 "message": "Исторические данные этой точки пока не удалось получить из iikoServer.",
                 "details": str(error),
                 "archivedPoint": True,
-                "point": point,
+                "point": resolved_point,
+                "requestedPoint": point,
+                "archiveKind": kind,
             }, 409
 
     core.build_analytics = build_analytics_with_archive
@@ -288,7 +344,7 @@ def install_archived_points(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/point-archive-polish.js?v=20260917-2"></script>'
+                tag = '<script src="/static/point-archive-polish.js?v=20260917-3"></script>'
                 if "point-archive-polish.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
