@@ -99,6 +99,7 @@
   let activeTrigger = null;
 
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+  const isDashboardPoint = select => !!select && select.id === 'point' && location.pathname.endsWith('/dashboard-v2.html');
 
   function ensurePanel(){
     if(panel) return panel;
@@ -186,7 +187,9 @@
   }
 
   function enhance(select){
-    if(!select || select.dataset.dcSelectEnhanced === '1') return;
+    // The sales dashboard point field has its own checkbox multi-select. Never
+    // attach the generic single-select UI to it, regardless of script order.
+    if(!select || isDashboardPoint(select) || select.dataset.dcSelectEnhanced === '1') return;
     select.dataset.dcSelectEnhanced = '1';
     select.classList.add('dc-select-native');
 
@@ -237,7 +240,9 @@
   }
 
   function bindAll(root=document){
-    root.querySelectorAll?.('.field select').forEach(enhance);
+    root.querySelectorAll?.('.field select').forEach(select => {
+      if(!isDashboardPoint(select)) enhance(select);
+    });
   }
 
   bindAll();
