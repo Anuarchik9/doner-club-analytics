@@ -217,6 +217,12 @@
 
   renderPresets(true);
 
+  // Every fresh page load starts on the actual current day. This deliberately
+  // overrides the legacy dashboard default (which could leave yesterday selected)
+  // and also marks the «Сегодня» preset active.
+  const initialToday = isoLocal(new Date());
+  setDates(initialToday, initialToday, root.querySelector('[data-preset="today"]'));
+
   // If the page remains open over midnight / the first day of a new month,
   // refresh the rolling month buttons automatically. Example: on 1 October
   // they become September, August, July; June disappears without a deploy.
