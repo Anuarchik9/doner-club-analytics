@@ -37,6 +37,7 @@ def post_worker_init(worker):
     from mobile_responsive_fix import install_mobile_responsive_fix
     from multi_point import install_multi_point
     from archived_points import install_archived_points
+    from point_visibility import install_point_visibility
 
     # Extend the dashboard allowlist before auth routes start serving requests.
     # Passwords are still validated directly by iikoServer.
@@ -72,6 +73,9 @@ def post_worker_init(worker):
     install_stop_loss(worker.wsgi)
     install_sales_channel(worker.wsgi)
     install_team_meal(worker.wsgi)
+    # Register this before multi-point so its script is injected after the
+    # multi-point selector and can remove technical/non-sales options reliably.
+    install_point_visibility(worker.wsgi)
     # Install after team-meal so combined sales-mix requests preserve its
     # classification patch, then expose the checkbox point selector.
     install_multi_point(worker.wsgi)
