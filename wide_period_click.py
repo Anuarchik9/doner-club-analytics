@@ -16,9 +16,15 @@ def install_wide_period_click(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/wide-period-click.js?v=20260916-3"></script>'
+                tags = (
+                    '<script src="/static/wide-period-click.js?v=20260917-4"></script>'
+                    '<script src="/static/picker-stability-fix.js?v=20260917-1"></script>'
+                )
                 if "wide-period-click.js" not in body and "</body>" in body:
-                    response.set_data(body.replace("</body>", tag + "</body>", 1))
+                    response.set_data(body.replace("</body>", tags + "</body>", 1))
+                    response.headers.pop("Content-Length", None)
+                elif "picker-stability-fix.js" not in body and "</body>" in body:
+                    response.set_data(body.replace("</body>", '<script src="/static/picker-stability-fix.js?v=20260917-1"></script></body>', 1))
                     response.headers.pop("Content-Length", None)
             except Exception:
                 pass
