@@ -61,7 +61,7 @@ def install_dashboard_category_readability(app):
 
                 # Focused category patch: classifies Ava / Пиала / Да-да as drinks
                 # and keeps the «ещё N» expander reliable after dynamic rerenders.
-                category_fix_tag = '<script src="/static/dashboard-category-fixes.js?v=20260917-1"></script>'
+                category_fix_tag = '<script src="/static/dashboard-category-fixes.js?v=20260917-2"></script>'
                 if "dashboard-category-fixes.js" not in body and "</body>" in body:
                     body = body.replace("</body>", category_fix_tag + "</body>", 1)
                     changed = True
