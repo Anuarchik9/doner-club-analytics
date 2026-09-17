@@ -4,7 +4,7 @@ Passwords are still verified directly against iikoServer by dashboard_auth.
 This module only adds approved iiko logins to the dashboard allowlist.
 """
 
-APPROVED_IIKO_USERS = {"nurtleu"}
+APPROVED_IIKO_USERS = {"nurtleu", "elmira"}
 
 
 def install_auth_allowlist_patch():
