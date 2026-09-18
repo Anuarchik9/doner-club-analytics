@@ -1646,10 +1646,12 @@ def _build_supplier_history_olap(supplier_name, days=30, supplier_id=""):
 
 
 def build_supplier_history(supplier_name, days=30, supplier_id=""):
-    """Load supplier history from actual incoming-invoice documents first.
+    """Load supplier history from real incoming-invoice documents first.
 
-    TRANSACTIONS OLAP is kept only as a compatibility fallback because it can
-    expose a short accounting window even when older incoming invoices exist.
+    Preferred source:
+      1) iiko Public Web API incoming-invoice export
+      2) legacy iikoServer incoming-invoice export
+      3) TRANSACTIONS OLAP only as an explicit compatibility fallback
     """
     supplier_name = _norm(supplier_name)
     supplier_id = _norm(supplier_id)
@@ -1661,9 +1663,60 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
     date_from = (today - timedelta(days=days)).isoformat()
     date_to = today.isoformat()
 
+    public_web_error = ""
+    public_web_meta = {}
+    try:
+        rows, public_web_meta = _iikoweb_supplier_history_rows(
+            supplier_name,
+            supplier_id,
+            date_from,
+            date_to,
+        )
+        supplier = _supplier_from_invoice_rows(
+            rows,
+            supplier_name,
+            supplier_id,
+        )
+        if supplier:
+            all_dates = [
+                point.get("date")
+                for product in supplier.get("products") or []
+                for point in product.get("history") or []
+                if point.get("date")
+            ]
+            aliases = public_web_meta.get("aliases") or []
+            return {
+                "success": True,
+                "period": {"from": date_from, "to": date_to, "days": days},
+                "supplier": supplier,
+                "serverFiltered": True,
+                "historyMeta": {
+                    "source": "iikoWebIncomingInvoice",
+                    "sourceLabel": "Приходные накладные iiko",
+                    "oldestDate": min(all_dates) if all_dates else "",
+                    "newestDate": max(all_dates) if all_dates else "",
+                    "points": len(all_dates),
+                    "aliases": aliases,
+                    "aliasCount": len({x.get("id") for x in aliases if x.get("id")}),
+                    "invoiceRows": len(rows),
+                    "departmentsChecked": public_web_meta.get("departmentsChecked"),
+                    "exports": (public_web_meta.get("exports") or [])[:30],
+                    "errors": (public_web_meta.get("errors") or [])[:10],
+                },
+            }
+        public_web_error = (
+            "iiko Public Web API returned no usable incoming-invoice rows"
+            + (
+                f"; exports={len(public_web_meta.get('exports') or [])}"
+                if public_web_meta else ""
+            )
+        )
+    except Exception as error:
+        public_web_error = str(error)
+
     base_url = token = None
-    invoice_error = ""
-    invoice_meta = []
+    legacy_error = ""
+    legacy_meta = []
     try:
         base_url, token = core.iiko_server_auth()
 
@@ -1676,7 +1729,7 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                 or _supplier_alias_match(item.get("name"), supplier_name)
             ]
         except Exception as error:
-            invoice_error = f"contractors: {error}"
+            legacy_error = f"contractors: {error}"
 
         alias_map = {}
         for item in aliases:
@@ -1689,8 +1742,6 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                 {"id": supplier_id, "name": supplier_name, "type": "SUPPLIER"},
             )
         elif supplier_name and not alias_map:
-            # No supplier ID means we cannot safely filter the invoice endpoint
-            # by contractor. In that rare case the OLAP fallback below is safer.
             aliases = []
         aliases = list(alias_map.values())
 
@@ -1716,7 +1767,7 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                             fallback_supplier_name=supplier_name or alias_name,
                             fallback_supplier_id=alias_id,
                         )
-                        invoice_meta.append({
+                        legacy_meta.append({
                             "supplierId": alias_id,
                             "supplierName": alias_name,
                             "from": chunk_from,
@@ -1739,7 +1790,7 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                             seen.add(key)
                             all_rows.append(row)
                     except Exception as error:
-                        invoice_error = str(error)
+                        legacy_error = str(error)
 
         supplier = _supplier_from_invoice_rows(
             all_rows,
@@ -1760,19 +1811,20 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                 "serverFiltered": True,
                 "historyMeta": {
                     "source": "incomingInvoice",
-                    "sourceLabel": "Приходные накладные iiko",
+                    "sourceLabel": "Приходные накладные iikoServer",
                     "oldestDate": min(all_dates) if all_dates else "",
                     "newestDate": max(all_dates) if all_dates else "",
                     "points": len(all_dates),
                     "aliases": aliases,
                     "aliasCount": len(aliases),
-                    "invoiceChunks": len(invoice_meta),
+                    "invoiceChunks": len(legacy_meta),
                     "invoiceRows": len(all_rows),
-                    "invoiceMeta": invoice_meta[:20],
+                    "invoiceMeta": legacy_meta[:20],
+                    "publicWebError": public_web_error,
                 },
             }
     except Exception as error:
-        invoice_error = str(error)
+        legacy_error = str(error)
     finally:
         if base_url and token:
             core.iiko_server_logout(base_url, token)
@@ -1781,8 +1833,10 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
     meta = fallback.setdefault("historyMeta", {})
     meta["source"] = "transactionsOlapFallback"
     meta["sourceLabel"] = "TRANSACTIONS OLAP (резервный источник)"
-    meta["incomingInvoiceError"] = invoice_error
-    meta["incomingInvoiceMeta"] = invoice_meta[:10]
+    meta["publicWebError"] = public_web_error
+    meta["publicWebMeta"] = public_web_meta
+    meta["incomingInvoiceError"] = legacy_error
+    meta["incomingInvoiceMeta"] = legacy_meta[:10]
     return fallback
 
 def install_procurement_diagnostics(app):
