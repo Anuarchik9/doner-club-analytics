@@ -1942,12 +1942,13 @@ def _build_supplier_history_olap(supplier_name, days=30, supplier_id=""):
 
 
 def build_supplier_history(supplier_name, days=30, supplier_id=""):
-    """Load supplier history from real incoming-invoice documents first.
+    """Load supplier history from the same iikoCloud inventory API used by this site.
 
     Preferred source:
-      1) iiko Public Web API incoming-invoice export
-      2) legacy iikoServer incoming-invoice export
-      3) TRANSACTIONS OLAP only as an explicit compatibility fallback
+      1) /api/inventory/v1/incoming_invoice/list + /get
+      2) iiko Public Web incoming-invoice export
+      3) legacy iikoServer incoming-invoice export
+      4) TRANSACTIONS OLAP only as a compatibility fallback
     """
     supplier_name = _norm(supplier_name)
     supplier_id = _norm(supplier_id)
@@ -1958,6 +1959,62 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
     today = datetime.now(core.LOCAL_TZ).date()
     date_from = (today - timedelta(days=days)).isoformat()
     date_to = today.isoformat()
+    cache_key = (supplier_id or _supplier_name_key(supplier_name), days, date_to)
+    cached = _history_cache_get(cache_key)
+    if cached:
+        return cached
+
+    cloud_error = ""
+    cloud_meta = {}
+    try:
+        rows, cloud_meta = _iikocloud_supplier_history_rows(
+            supplier_name,
+            supplier_id,
+            date_from,
+            date_to,
+        )
+        supplier = _supplier_from_invoice_rows(
+            rows,
+            supplier_name,
+            supplier_id,
+        )
+        if supplier:
+            all_dates = [
+                point.get("date")
+                for product in supplier.get("products") or []
+                for point in product.get("history") or []
+                if point.get("date")
+            ]
+            result = {
+                "success": True,
+                "period": {"from": date_from, "to": date_to, "days": days},
+                "supplier": supplier,
+                "serverFiltered": True,
+                "historyMeta": {
+                    "source": "iikoCloudIncomingInvoice",
+                    "sourceLabel": "Приходные накладные iikoCloud",
+                    "oldestDate": min(all_dates) if all_dates else "",
+                    "newestDate": max(all_dates) if all_dates else "",
+                    "points": len(all_dates),
+                    "invoiceRows": len(rows),
+                    "organizations": cloud_meta.get("organizations") or [],
+                    "listedDocuments": cloud_meta.get("listedDocuments"),
+                    "detailDocuments": cloud_meta.get("detailDocuments"),
+                    "errors": (cloud_meta.get("errors") or [])[:10],
+                    "detailErrors": (cloud_meta.get("detailErrors") or [])[:10],
+                },
+            }
+            _history_cache_set(cache_key, result)
+            return result
+        cloud_error = (
+            "iikoCloud incoming_invoice returned no usable rows"
+            + (
+                f"; listed={cloud_meta.get('listedDocuments')}, details={cloud_meta.get('detailDocuments')}"
+                if cloud_meta else ""
+            )
+        )
+    except Exception as error:
+        cloud_error = str(error)
 
     public_web_error = ""
     public_web_meta = {}
@@ -1980,26 +2037,28 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                 for point in product.get("history") or []
                 if point.get("date")
             ]
-            aliases = public_web_meta.get("aliases") or []
-            return {
+            result = {
                 "success": True,
                 "period": {"from": date_from, "to": date_to, "days": days},
                 "supplier": supplier,
                 "serverFiltered": True,
                 "historyMeta": {
                     "source": "iikoWebIncomingInvoice",
-                    "sourceLabel": "Приходные накладные iiko",
+                    "sourceLabel": "Приходные накладные iiko Public Web API",
                     "oldestDate": min(all_dates) if all_dates else "",
                     "newestDate": max(all_dates) if all_dates else "",
                     "points": len(all_dates),
-                    "aliases": aliases,
-                    "aliasCount": len({x.get("id") for x in aliases if x.get("id")}),
+                    "aliases": public_web_meta.get("aliases") or [],
+                    "aliasCount": len({x.get("id") for x in (public_web_meta.get("aliases") or []) if x.get("id")}),
                     "invoiceRows": len(rows),
                     "departmentsChecked": public_web_meta.get("departmentsChecked"),
                     "exports": (public_web_meta.get("exports") or [])[:30],
                     "errors": (public_web_meta.get("errors") or [])[:10],
+                    "cloudError": cloud_error,
                 },
             }
+            _history_cache_set(cache_key, result)
+            return result
         public_web_error = (
             "iiko Public Web API returned no usable incoming-invoice rows"
             + (
@@ -2100,7 +2159,7 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                 for point in product.get("history") or []
                 if point.get("date")
             ]
-            return {
+            result = {
                 "success": True,
                 "period": {"from": date_from, "to": date_to, "days": days},
                 "supplier": supplier,
@@ -2116,9 +2175,12 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                     "invoiceChunks": len(legacy_meta),
                     "invoiceRows": len(all_rows),
                     "invoiceMeta": legacy_meta[:20],
+                    "cloudError": cloud_error,
                     "publicWebError": public_web_error,
                 },
             }
+            _history_cache_set(cache_key, result)
+            return result
     except Exception as error:
         legacy_error = str(error)
     finally:
@@ -2129,10 +2191,13 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
     meta = fallback.setdefault("historyMeta", {})
     meta["source"] = "transactionsOlapFallback"
     meta["sourceLabel"] = "TRANSACTIONS OLAP (резервный источник)"
+    meta["cloudError"] = cloud_error
+    meta["cloudMeta"] = cloud_meta
     meta["publicWebError"] = public_web_error
     meta["publicWebMeta"] = public_web_meta
     meta["incomingInvoiceError"] = legacy_error
     meta["incomingInvoiceMeta"] = legacy_meta[:10]
+    _history_cache_set(cache_key, fallback)
     return fallback
 
 def install_procurement_diagnostics(app):
