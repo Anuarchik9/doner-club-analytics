@@ -966,7 +966,7 @@ def diagnostics_text(result):
 
 
 
-def build_supplier_history(supplier_name, days=30, supplier_id=""):
+def _build_supplier_history_olap(supplier_name, days=30, supplier_id=""):
     supplier_name = _norm(supplier_name)
     supplier_id = _norm(supplier_id)
     if not supplier_id and not _valid_supplier_name(supplier_name):
@@ -1261,6 +1261,147 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
         if base_url and token:
             core.iiko_server_logout(base_url, token)
 
+
+
+def build_supplier_history(supplier_name, days=30, supplier_id=""):
+    """Load supplier history from actual incoming-invoice documents first.
+
+    TRANSACTIONS OLAP is kept only as a compatibility fallback because it can
+    expose a short accounting window even when older incoming invoices exist.
+    """
+    supplier_name = _norm(supplier_name)
+    supplier_id = _norm(supplier_id)
+    if not supplier_id and not _valid_supplier_name(supplier_name):
+        raise ValueError("supplier is required")
+
+    days = max(30, min(int(days or 30), 730))
+    today = datetime.now(core.LOCAL_TZ).date()
+    date_from = (today - timedelta(days=days)).isoformat()
+    date_to = today.isoformat()
+
+    base_url = token = None
+    invoice_error = ""
+    invoice_meta = []
+    try:
+        base_url, token = core.iiko_server_auth()
+
+        aliases = []
+        try:
+            contractors = _contractor_catalog(base_url, token)
+            aliases = [
+                item for item in contractors
+                if (supplier_id and item.get("id") == supplier_id)
+                or _supplier_alias_match(item.get("name"), supplier_name)
+            ]
+        except Exception as error:
+            invoice_error = f"contractors: {error}"
+
+        alias_map = {}
+        for item in aliases:
+            key = item.get("id") or _supplier_name_key(item.get("name"))
+            if key:
+                alias_map[key] = item
+        if supplier_id:
+            alias_map.setdefault(
+                supplier_id,
+                {"id": supplier_id, "name": supplier_name, "type": "SUPPLIER"},
+            )
+        elif supplier_name and not alias_map:
+            # No supplier ID means we cannot safely filter the invoice endpoint
+            # by contractor. In that rare case the OLAP fallback below is safer.
+            aliases = []
+        aliases = list(alias_map.values())
+
+        all_rows = []
+        seen = set()
+        if aliases:
+            for alias in aliases:
+                alias_id = _norm(alias.get("id"))
+                alias_name = _norm(alias.get("name") or supplier_name)
+                if not alias_id:
+                    continue
+                for chunk_from, chunk_to in _date_chunks(date_from, date_to, 90):
+                    try:
+                        xml_bytes = _incoming_invoice_xml(
+                            base_url,
+                            token,
+                            chunk_from,
+                            chunk_to,
+                            supplier_id=alias_id,
+                        )
+                        rows, meta = _parse_incoming_invoice_rows(
+                            xml_bytes,
+                            fallback_supplier_name=supplier_name or alias_name,
+                            fallback_supplier_id=alias_id,
+                        )
+                        invoice_meta.append({
+                            "supplierId": alias_id,
+                            "supplierName": alias_name,
+                            "from": chunk_from,
+                            "to": chunk_to,
+                            **meta,
+                        })
+                        for row in rows:
+                            row["supplier"] = supplier_name or alias_name
+                            row["supplierId"] = supplier_id or alias_id
+                            key = (
+                                row.get("date"),
+                                row.get("document"),
+                                row.get("productId") or row.get("product"),
+                                round(_num(row.get("quantity")), 6),
+                                round(_num(row.get("sum")), 2),
+                                round(_num(row.get("unitPrice")), 4),
+                            )
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            all_rows.append(row)
+                    except Exception as error:
+                        invoice_error = str(error)
+
+        supplier = _supplier_from_invoice_rows(
+            all_rows,
+            supplier_name,
+            supplier_id or (aliases[0].get("id") if aliases else ""),
+        )
+        if supplier:
+            all_dates = [
+                point.get("date")
+                for product in supplier.get("products") or []
+                for point in product.get("history") or []
+                if point.get("date")
+            ]
+            return {
+                "success": True,
+                "period": {"from": date_from, "to": date_to, "days": days},
+                "supplier": supplier,
+                "serverFiltered": True,
+                "historyMeta": {
+                    "source": "incomingInvoice",
+                    "sourceLabel": "Приходные накладные iiko",
+                    "oldestDate": min(all_dates) if all_dates else "",
+                    "newestDate": max(all_dates) if all_dates else "",
+                    "points": len(all_dates),
+                    "aliases": aliases,
+                    "aliasCount": len(aliases),
+                    "invoiceChunks": len(invoice_meta),
+                    "invoiceRows": len(all_rows),
+                    "invoiceMeta": invoice_meta[:20],
+                },
+            }
+    except Exception as error:
+        invoice_error = str(error)
+    finally:
+        if base_url and token:
+            core.iiko_server_logout(base_url, token)
+
+    fallback = _build_supplier_history_olap(supplier_name, days, supplier_id)
+    meta = fallback.setdefault("historyMeta", {})
+    meta["source"] = "transactionsOlapFallback"
+    meta["sourceLabel"] = "TRANSACTIONS OLAP (резервный источник)"
+    meta["incomingInvoiceError"] = invoice_error
+    meta["incomingInvoiceMeta"] = invoice_meta[:10]
+    return fallback
 
 def install_procurement_diagnostics(app):
     if getattr(app, "_doner_procurement_diagnostics_installed", False):
