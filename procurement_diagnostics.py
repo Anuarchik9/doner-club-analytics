@@ -1,5 +1,6 @@
 import re
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 import requests
@@ -250,6 +251,379 @@ def _supplier_alias_match(candidate, target):
     if min(len(left), len(right)) >= 5 and (left in right or right in left):
         return True
     return False
+
+
+def _local_tag(tag):
+    return str(tag or "").split("}")[-1].split(":")[-1]
+
+
+def _leaf_entries(node):
+    result = []
+    def walk(current, path):
+        tag = _local_tag(current.tag)
+        next_path = path + [tag]
+        children = list(current)
+        text = (current.text or "").strip()
+        if not children and text:
+            result.append((".".join(next_path), tag, text))
+            return
+        for child in children:
+            walk(child, next_path)
+    walk(node, [])
+    return result
+
+
+def _pick_leaf(entries, exact=(), contains=(), exclude=()):
+    exact_set = {str(x).casefold() for x in exact}
+    contains_set = tuple(str(x).casefold() for x in contains)
+    exclude_set = tuple(str(x).casefold() for x in exclude)
+    best = None
+    best_score = -10**9
+    for path, tag, value in entries:
+        low_tag = tag.casefold()
+        low_path = path.casefold()
+        if exclude_set and any(token in low_path for token in exclude_set):
+            continue
+        score = 0
+        if low_tag in exact_set:
+            score += 100
+        if contains_set and all(token in low_path for token in contains_set):
+            score += 30
+        if score <= 0:
+            continue
+        score -= len(path) * 0.01
+        if score > best_score:
+            best_score = score
+            best = value
+    return best
+
+
+def _contractor_catalog(base_url, token):
+    response = requests.get(
+        f"{base_url}/api/v2/entities/contractors",
+        params={"key": token},
+        timeout=35,
+    )
+    response.raise_for_status()
+    content_type = (response.headers.get("content-type") or "").lower()
+    contractors = []
+
+    def add_record(record):
+        if not isinstance(record, dict):
+            return
+        cid = _norm(record.get("id") or record.get("uuid") or record.get("supplierId"))
+        name = _norm(record.get("name") or record.get("fullName") or record.get("shortName"))
+        ctype = _norm(record.get("type") or record.get("counteragentType"))
+        if cid and name:
+            contractors.append({"id": cid, "name": name, "type": ctype})
+
+    if "json" in content_type:
+        payload = response.json()
+        def walk(value):
+            if isinstance(value, dict):
+                add_record(value)
+                for child in value.values():
+                    if isinstance(child, (dict, list)):
+                        walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+        walk(payload)
+    else:
+        try:
+            root = ET.fromstring(response.content)
+            for node in root.iter():
+                entries = _leaf_entries(node)
+                cid = _pick_leaf(entries, exact=("id", "uuid"))
+                name = _pick_leaf(entries, exact=("name", "fullName", "shortName"))
+                ctype = _pick_leaf(entries, exact=("type", "counteragentType"))
+                if cid and name:
+                    contractors.append({"id": _norm(cid), "name": _norm(name), "type": _norm(ctype)})
+        except ET.ParseError:
+            pass
+
+    unique = {}
+    for item in contractors:
+        unique[item["id"]] = item
+    return list(unique.values())
+
+
+def _incoming_invoice_xml(base_url, token, date_from, date_to, supplier_id=None):
+    params = {"key": token, "from": date_from, "to": date_to}
+    if supplier_id:
+        params["supplierId"] = supplier_id
+    response = requests.get(
+        f"{base_url}/api/documents/export/incomingInvoice",
+        params=params,
+        timeout=70,
+    )
+    response.raise_for_status()
+    return response.content
+
+
+def _invoice_item_candidates(root):
+    candidates = []
+    for node in root.iter():
+        entries = _leaf_entries(node)
+        lows = [path.casefold() for path, _tag, _value in entries]
+        tags = [tag.casefold() for _path, tag, _value in entries]
+        has_product = any("product" in path or tag in {"product", "productid", "productname"} for path, tag in zip(lows, tags))
+        has_qty = any(
+            tag in {"amount", "quantity", "qty", "count", "actualamount", "productamount"}
+            or path.endswith(".amount")
+            or path.endswith(".quantity")
+            for path, tag in zip(lows, tags)
+        )
+        has_price = any(
+            tag in {"price", "sum", "total", "cost", "productsum", "unitprice", "pricewithoutvat"}
+            or "price" in tag
+            or tag.endswith("sum")
+            for tag in tags
+        )
+        tag_name = _local_tag(node.tag).casefold()
+        if has_product and has_qty and has_price and (
+            "item" in tag_name or "line" in tag_name or "record" in tag_name or len(list(node)) <= 12
+        ):
+            candidates.append(node)
+
+    if not candidates:
+        return []
+
+    parent = {child: node for node in root.iter() for child in node}
+    candidate_set = set(candidates)
+    minimal = []
+    for node in candidates:
+        descendant_candidate = False
+        for child in node.iter():
+            if child is not node and child in candidate_set:
+                descendant_candidate = True
+                break
+        if not descendant_candidate:
+            minimal.append(node)
+    return minimal
+
+
+def _ancestor_invoice_info(node, parent):
+    current = node
+    best = {"date": "", "document": "", "supplierId": "", "supplierName": ""}
+    for _ in range(8):
+        current = parent.get(current)
+        if current is None:
+            break
+        entries = _leaf_entries(current)
+        if not best["date"]:
+            best["date"] = _pick_leaf(
+                entries,
+                exact=(
+                    "dateIncoming", "documentDate", "invoiceDate", "deliveryDate",
+                    "date", "dateTime", "createdAt",
+                ),
+                exclude=("item.", "items.", "line.", "lines."),
+            ) or ""
+        if not best["document"]:
+            best["document"] = _pick_leaf(
+                entries,
+                exact=("documentNumber", "number", "invoiceNumber", "document", "num"),
+                exclude=("item.", "items.", "line.", "lines."),
+            ) or ""
+        if not best["supplierId"]:
+            best["supplierId"] = _pick_leaf(
+                entries,
+                exact=("supplierId", "counteragentId", "contractorId", "providerId"),
+            ) or ""
+        if not best["supplierName"]:
+            best["supplierName"] = _pick_leaf(
+                entries,
+                exact=("supplierName", "counteragentName", "contractorName", "providerName"),
+            ) or ""
+        if best["date"] and best["document"]:
+            break
+    return best
+
+
+def _normalize_invoice_date(value):
+    text = _norm(value)
+    if not text:
+        return ""
+    match = re.search(r"(20\d{2})[-.](\d{2})[-.](\d{2})", text)
+    if match:
+        return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+    match = re.search(r"(\d{2})[.](\d{2})[.](20\d{2})", text)
+    if match:
+        return f"{match.group(3)}-{match.group(2)}-{match.group(1)}"
+    return text[:10]
+
+
+def _parse_incoming_invoice_rows(xml_bytes, fallback_supplier_name="", fallback_supplier_id=""):
+    if not xml_bytes:
+        return [], {"root": "", "itemCandidates": 0}
+    root = ET.fromstring(xml_bytes)
+    parent = {child: node for node in root.iter() for child in node}
+    rows = []
+    candidates = _invoice_item_candidates(root)
+
+    for item in candidates:
+        entries = _leaf_entries(item)
+        product_name = (
+            _pick_leaf(entries, exact=("productName", "itemName", "name"), contains=("product",))
+            or _pick_leaf(entries, exact=("productName", "itemName"))
+        )
+        product_id = _pick_leaf(entries, exact=("productId", "itemId"), contains=("product",)) or ""
+        unit = (
+            _pick_leaf(entries, exact=("measureUnit", "unitName", "unit", "mainUnit"), contains=("unit",))
+            or _pick_leaf(entries, exact=("measureUnit", "unitName", "unit"))
+            or ""
+        )
+        quantity = _num(
+            _pick_leaf(entries, exact=("amount", "quantity", "qty", "actualAmount", "productAmount"))
+        )
+        line_sum = _num(
+            _pick_leaf(entries, exact=("sum", "total", "productSum", "cost", "totalSum"))
+        )
+        unit_price = _num(
+            _pick_leaf(entries, exact=("price", "unitPrice", "priceWithoutVat", "costPrice"))
+        )
+        if unit_price <= 0 and quantity and line_sum:
+            unit_price = line_sum / quantity
+        if line_sum <= 0 and quantity and unit_price:
+            line_sum = quantity * unit_price
+        if not product_name:
+            # Some iiko builds put the product name in a nested <product><name> field.
+            for path, tag, value in entries:
+                if tag.casefold() == "name" and "product" in path.casefold():
+                    product_name = value
+                    break
+        if not product_name or quantity <= 0 or unit_price <= 0:
+            continue
+
+        info = _ancestor_invoice_info(item, parent)
+        date_value = _normalize_invoice_date(info.get("date"))
+        document = _norm(info.get("document"))
+        supplier_id = _norm(info.get("supplierId") or fallback_supplier_id)
+        supplier_name = _norm(info.get("supplierName") or fallback_supplier_name)
+        rows.append({
+            "date": date_value,
+            "document": document,
+            "supplierId": supplier_id,
+            "supplier": supplier_name,
+            "productId": _norm(product_id),
+            "product": _norm(product_name),
+            "unit": _norm(unit),
+            "quantity": round(quantity, 6),
+            "sum": round(line_sum, 2),
+            "unitPrice": round(unit_price, 4),
+        })
+
+    meta = {
+        "root": _local_tag(root.tag),
+        "itemCandidates": len(candidates),
+        "rows": len(rows),
+    }
+    return rows, meta
+
+
+def _supplier_from_invoice_rows(rows, supplier_name, supplier_id):
+    documents = set()
+    products = {}
+    total_spend = 0.0
+    total_quantity = 0.0
+    last_delivery = ""
+
+    for row in rows:
+        date_value = _norm(row.get("date"))
+        product_name = _norm(row.get("product"))
+        quantity = abs(_num(row.get("quantity")))
+        line_sum = abs(_num(row.get("sum")))
+        unit_price = abs(_num(row.get("unitPrice")))
+        if not date_value or not product_name or quantity <= 0 or unit_price <= 0:
+            continue
+        document = _norm(row.get("document"))
+        unit = _norm(row.get("unit"))
+        total_spend += line_sum
+        total_quantity += quantity
+        if document:
+            documents.add(f"{date_value}|{document}")
+        if date_value > last_delivery:
+            last_delivery = date_value
+
+        product = products.setdefault(product_name, {
+            "name": product_name,
+            "unit": unit,
+            "totalSpend": 0.0,
+            "totalQuantity": 0.0,
+            "history": {},
+        })
+        product["totalSpend"] += line_sum
+        product["totalQuantity"] += quantity
+        if unit and not product["unit"]:
+            product["unit"] = unit
+        day = product["history"].setdefault(date_value, {
+            "sum": 0.0,
+            "quantity": 0.0,
+            "prices": [],
+            "documents": set(),
+        })
+        day["sum"] += line_sum
+        day["quantity"] += quantity
+        day["prices"].append(unit_price)
+        if document:
+            day["documents"].add(document)
+
+    result_products = []
+    for product in products.values():
+        history = []
+        for date_value, values in sorted(product["history"].items()):
+            price = (
+                values["sum"] / values["quantity"]
+                if values["quantity"] and values["sum"]
+                else sum(values["prices"]) / len(values["prices"])
+            )
+            history.append({
+                "date": date_value,
+                "price": round(price, 2),
+                "quantity": round(values["quantity"], 4),
+                "sum": round(values["sum"], 2),
+                "documents": sorted(values["documents"]),
+            })
+        if not history:
+            continue
+        current = history[-1]
+        previous = history[-2] if len(history) > 1 else None
+        change = None
+        change_pct = None
+        if previous and previous["price"]:
+            change = round(current["price"] - previous["price"], 2)
+            change_pct = round(change / previous["price"] * 100, 2)
+        prices = [point["price"] for point in history]
+        result_products.append({
+            "name": product["name"],
+            "unit": product["unit"],
+            "totalSpend": round(product["totalSpend"], 2),
+            "totalQuantity": round(product["totalQuantity"], 4),
+            "currentPrice": current["price"],
+            "previousPrice": previous["price"] if previous else None,
+            "change": change,
+            "changePct": change_pct,
+            "lastDate": current["date"],
+            "minPrice": min(prices),
+            "maxPrice": max(prices),
+            "history": history,
+        })
+
+    result_products.sort(key=lambda item: (-item["totalSpend"], item["name"].lower()))
+    if not result_products:
+        return None
+    return {
+        "id": supplier_id,
+        "name": supplier_name,
+        "type": "SUPPLIER",
+        "totalSpend": round(total_spend, 2),
+        "totalQuantity": round(total_quantity, 4),
+        "deliveries": len(documents),
+        "lastDelivery": last_delivery,
+        "productsCount": len(result_products),
+        "products": result_products,
+    }
 
 
 def _supplier_rollup(rows, date_field, document_field, product_field, unit_field, supplier_name_field, supplier_type_field, supplier_id_field=None):
