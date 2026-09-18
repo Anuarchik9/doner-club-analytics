@@ -12,11 +12,11 @@
 .hero{padding:42px 0 24px}.eyebrow{color:var(--orange);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(40px,5vw,68px);line-height:.96;letter-spacing:-.055em;margin:7px 0 8px}.hero p{margin:0;color:var(--muted);max-width:900px;line-height:1.6}
 .filters{display:grid;grid-template-columns:1fr auto;gap:12px;padding:16px;border:1px solid var(--line);border-radius:20px;background:#111}.field label{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin:0 0 7px 2px}.field select{width:100%;height:46px;border:1px solid #333;background:#0b0b0b;color:#fff;border-radius:12px;padding:0 12px}.go{height:46px;border:0;border-radius:12px;padding:0 22px;background:var(--orange);color:#fff;font-weight:850;align-self:end;cursor:pointer}
 .section{margin:30px 0 12px;display:flex;justify-content:space-between;align-items:center;gap:12px}.section h2{margin:0;font-size:20px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.card,.panel{background:linear-gradient(160deg,#151515,#101010);border:1px solid var(--line);border-radius:20px;box-shadow:0 18px 50px rgba(0,0,0,.22)}.card{padding:20px;min-height:150px;position:relative;overflow:hidden}.card:after{content:"";position:absolute;width:110px;height:110px;border-radius:50%;right:-55px;top:-55px;background:rgba(138,92,255,.09)}.label{color:var(--muted);font-size:12px;font-weight:700}.value{font-size:32px;font-weight:950;letter-spacing:-.045em;margin-top:18px}.value.ok{color:var(--green)}.value.warn{color:#f0b36b}.sub{color:var(--muted);font-size:11px;margin-top:9px;line-height:1.45}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.panel{padding:20px}.panel h3{margin:0 0 6px}.pill{display:inline-flex;align-items:center;border:1px solid #333;border-radius:99px;padding:5px 9px;color:#bbb;font-size:10px}.list{display:grid;gap:10px;margin-top:16px}.list-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:13px 0;border-bottom:1px solid #222}.list-row:last-child{border-bottom:0}.list-row strong{font-size:12px}.list-row span{color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.panel{padding:20px}.panel h3{margin:0 0 6px}.pill{display:inline-flex;align-items:center;border:1px solid #333;border-radius:99px;padding:5px 9px;color:#bbb;font-size:10px}.list{display:grid;gap:10px;margin-top:16px}.list-row{display:grid;grid-template-columns:minmax(150px,.42fr) minmax(0,1fr);gap:16px;padding:13px 0;border-bottom:1px solid #222;align-items:start}.list-row:last-child{border-bottom:0}.list-row strong{font-size:12px;line-height:1.45;overflow-wrap:anywhere}.list-row span{color:var(--muted);font-size:11px;line-height:1.5;overflow-wrap:anywhere;word-break:break-word}
 .tablebox{overflow:auto}.tablebox table{width:100%;border-collapse:collapse;min-width:820px}.tablebox th{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.08em;text-align:left;padding:12px 9px;border-bottom:1px solid var(--line)}.tablebox td{padding:13px 9px;border-bottom:1px solid #202020;vertical-align:top}.num{text-align:right}.empty{padding:34px;border:1px dashed #333;border-radius:16px;color:var(--muted);text-align:center;line-height:1.55}.note{margin-top:16px;padding:15px 17px;border:1px solid #403323;background:#17120d;border-radius:15px;color:#cba984;font-size:12px;line-height:1.55}
-.loading{display:none;margin-top:14px;padding:16px;border:1px solid #333;border-radius:14px;background:#101010;color:#aaa}.loading.show{display:block}.error{margin-top:14px;padding:16px;border:1px solid #6b3030;background:#241111;color:#ffb2b2;border-radius:14px}
+.loading{display:none;margin-top:14px;padding:17px 18px;border:1px solid #3d332d;border-radius:16px;background:linear-gradient(135deg,#15110f,#101010);color:#aaa}.loading.show{display:block}.progress-top{display:flex;align-items:center;justify-content:space-between;gap:16px}.progress-title{font-size:13px;font-weight:900;color:#fff}.progress-pct{font-size:22px;font-weight:950;letter-spacing:-.04em;color:#ff7d49;min-width:54px;text-align:right}.progress-track{height:9px;margin-top:12px;background:#262626;border:1px solid #313131;border-radius:999px;overflow:hidden}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,#ff5a1f,#ff915d);border-radius:999px;transition:width .24s ease}.progress-stage{margin-top:9px;color:#d0c7c1;font-size:11px;font-weight:760;line-height:1.4}.progress-meta{margin-top:4px;color:#777;font-size:10px;line-height:1.45}.error{margin-top:14px;padding:16px;border:1px solid #6b3030;background:#241111;color:#ffb2b2;border-radius:14px}
 @media(max-width:900px){.cards{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}}
-@media(max-width:600px){.wrap{padding:0 14px 40px}.brand span{display:none}.filters{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.section{align-items:flex-start}.value{font-size:29px}}
+@media(max-width:600px){.wrap{padding:0 14px 40px}.brand span{display:none}.filters{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.section{align-items:flex-start}.value{font-size:29px}.list-row{grid-template-columns:1fr;gap:5px}.progress-pct{font-size:20px}}
 </style>
 </head>
 <body>
@@ -33,7 +33,12 @@
   <div class="field"><label>Период диагностики</label><select id="days"><option value="30">30 дней</option><option value="90">90 дней</option><option value="180" selected>180 дней</option><option value="365">365 дней</option><option value="730">730 дней</option></select></div>
   <button class="go" id="scan">Проверить iiko</button>
 </section>
-<div class="loading" id="loading">Проверяем TRANSACTIONS OLAP, приходные операции и поля контрагентов…</div>
+<div class="loading" id="loading">
+  <div class="progress-top"><div class="progress-title">Проверяем данные закупок в iiko</div><div class="progress-pct" id="progressPct">0%</div></div>
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="progress-stage" id="progressStage">Подготавливаем запрос…</div>
+  <div class="progress-meta" id="progressMeta">Ожидание ответа iikoServer</div>
+</div>
 <div id="error"></div>
 
 <div class="section"><h2>Готовность данных</h2><span class="muted" id="periodLabel">Ещё не проверено</span></div>
@@ -68,8 +73,49 @@ function renderList(root, items){
   if(!items.length){root.innerHTML='<div class="empty">Не найдено</div>';return}
   root.innerHTML=items.map(x=>'<div class="list-row"><strong>'+esc(x.title)+'</strong><span>'+esc(x.text)+'</span></div>').join('')
 }
+
+let progressTimer=null,progressStart=0,progressValue=0;
+function progressStage(p){
+  if(p>=100)return 'Готово';
+  if(p<14)return 'Подключаемся к iikoServer';
+  if(p<34)return 'Ищем приходные операции';
+  if(p<55)return 'Определяем поставщиков и контрагентов';
+  if(p<76)return 'Сверяем товары, суммы и количество';
+  if(p<91)return 'Восстанавливаем закупочные цены';
+  return 'Формируем результат';
+}
+function paintProgress(){
+  $('progressPct').textContent=Math.round(progressValue)+'%';
+  $('progressFill').style.width=Math.max(0,Math.min(100,progressValue))+'%';
+  $('progressStage').textContent=progressStage(progressValue);
+  const elapsed=Math.max(0,Math.floor((Date.now()-progressStart)/1000));
+  $('progressMeta').textContent=progressValue>=100?'Данные загружены':('iikoServer обрабатывает выбранный период · прошло '+elapsed+' с');
+}
+function startProgress(){
+  clearInterval(progressTimer);
+  progressStart=Date.now();progressValue=0;
+  $('loading').classList.add('show');paintProgress();
+  progressTimer=setInterval(()=>{
+    const elapsed=(Date.now()-progressStart)/1000;
+    const target=elapsed<1?10:elapsed<2.5?24:elapsed<5?42:elapsed<8?58:elapsed<12?72:elapsed<18?84:elapsed<28?91:96;
+    if(progressValue<target)progressValue+=Math.max(.5,(target-progressValue)*.13);
+    if(progressValue>97)progressValue=97;
+    paintProgress();
+  },180);
+}
+async function finishProgress(error=false){
+  clearInterval(progressTimer);progressTimer=null;
+  if(!error){
+    progressValue=100;paintProgress();
+    await new Promise(r=>setTimeout(r,380));
+  }else{
+    $('progressStage').textContent='Загрузка завершилась с ошибкой';
+    $('progressMeta').textContent='Проверьте сообщение ниже и повторите запрос';
+  }
+  if(!error)$('loading').classList.remove('show');
+}
 async function scan(){
-  $('loading').classList.add('show');$('error').innerHTML='';
+  startProgress();$('error').innerHTML='';$('scan').disabled=true;
   try{
     const j=await getJson('/procurement-diagnostics?days='+encodeURIComponent($('days').value));
     const cap=j.capability||{},ev=j.evidence||{},fs=j.fieldSupport||{};
@@ -84,11 +130,12 @@ async function scan(){
     renderList($('transactions'),(ev.transactionValues||[]).slice(0,18).map(x=>({title:x,text:'TRANSACTIONS OLAP'})));
     const rows=ev.priceSamples||[];
     $('priceRows').innerHTML=rows.length?rows.map(r=>'<tr><td>'+esc(r.date||'—')+'</td><td><b>'+esc(r.product||'—')+'</b><br><span class="muted">'+esc(r.transaction||'')+'</span></td><td>'+esc(r.supplier||'—')+'</td><td>'+esc(r.document||'—')+'</td><td>'+esc(r.unit||'—')+'</td><td class="num">'+money.format(Number(r.quantity||0))+'</td><td class="num">'+money.format(Number(r.sum||0))+' ₸</td><td class="num"><b>'+money.format(Number(r.unitPrice||0))+' ₸</b></td></tr>').join(''):'<tr><td colspan="8"><div class="empty">Закупочные строки с ценой пока не найдены</div></td></tr>';
-  }catch(e){$('error').innerHTML='<div class="error">'+esc(e.message)+'</div>'}
-  finally{$('loading').classList.remove('show')}
+  }catch(e){$('error').innerHTML='<div class="error">'+esc(e.message)+'</div>';await finishProgress(true)}
+  finally{if(!$('error').innerHTML)await finishProgress(false);$('scan').disabled=false}
 }
 $('scan').onclick=scan;
 </script>
-<script src="/static/navigation-shell.js?v=20260918-2"></script>
+<script src="/static/custom-select.js?v=20260918-3"></script>
+<script src="/static/navigation-shell.js?v=20260918-3"></script>
 </body>
 </html>
