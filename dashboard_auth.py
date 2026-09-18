@@ -216,7 +216,7 @@ def install_auth(app):
     @app.before_request
     def _protect_dashboard():
         path = request.path
-        if path in {"/login", "/logout", "/healthz", "/static/favicon.svg"}:
+        if path in {"/login", "/logout", "/healthz", "/static/favicon.svg"} or path.startswith("/telegram/webhook/"):
             return None
 
         if session.get("dc_authenticated"):
