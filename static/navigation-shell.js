@@ -23,6 +23,7 @@
 
   const isRevision = location.pathname.endsWith('/revisions.html');
   const isProcurement = location.pathname.endsWith('/procurement.html');
+  const isStaff = location.pathname.endsWith('/staff.html') || location.pathname.endsWith('/staff-diagnostics.html');
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'dc-nav-toggle';
@@ -39,11 +40,12 @@
   drawer.innerHTML = `
     <div class="dc-nav-brand"><b>DONER CLUB ANALYTICS</b><span>Управленческая система</span></div>
     <nav class="dc-nav-links">
-      <a class="dc-nav-link ${!isRevision&&!isProcurement?'active':''}" href="/static/dashboard-v2.html"><span class="dc-nav-icon">↗</span><span>Продажи и аналитика</span></a>
+      <a class="dc-nav-link ${!isRevision&&!isProcurement&&!isStaff?'active':''}" href="/static/dashboard-v2.html"><span class="dc-nav-icon">↗</span><span>Продажи и аналитика</span></a>
       <a class="dc-nav-link ${isRevision?'active':''}" href="/static/revisions.html"><span class="dc-nav-icon">≋</span><span>Ревизии</span></a>
       <a class="dc-nav-link ${isProcurement?'active':''}" href="/static/procurement.html"><span class="dc-nav-icon">₸</span><span>Закупки</span></a>
+      <a class="dc-nav-link ${isStaff?'active':''}" href="/static/staff.html"><span class="dc-nav-icon">◷</span><span>Персонал и табелирование</span></a>
     </nav>
-    <div class="dc-nav-foot">Продажи, ревизии и закупки разделены, чтобы каждый блок оставался понятным и быстрым.</div>`;
+    <div class="dc-nav-foot">Продажи, ревизии, закупки и персонал разделены, чтобы каждый управленческий блок оставался понятным и быстрым.</div>`;
 
   function setOpen(open){
     button.classList.toggle('open',open);
