@@ -42,6 +42,7 @@ def post_worker_init(worker):
     from online_offline_hover_fix import install_online_offline_hover_fix
     from telegram_bot import install_telegram_bot
     from procurement_diagnostics import install_procurement_diagnostics
+    from staff_diagnostics import install_staff_diagnostics
 
     # Extend the dashboard allowlist before auth routes start serving requests.
     # Passwords are still validated directly by iikoServer.
@@ -99,3 +100,4 @@ def post_worker_init(worker):
     # Telegram webhook is installed last so report commands use all active analytics patches.
     install_telegram_bot(worker.wsgi)
     install_procurement_diagnostics(worker.wsgi)
+    install_staff_diagnostics(worker.wsgi)
