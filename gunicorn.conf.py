@@ -43,6 +43,7 @@ def post_worker_init(worker):
     from telegram_bot import install_telegram_bot
     from procurement_diagnostics import install_procurement_diagnostics
     from staff_diagnostics import install_staff_diagnostics
+    from staff_analytics import install_staff_analytics
 
     # Extend the dashboard allowlist before auth routes start serving requests.
     # Passwords are still validated directly by iikoServer.
@@ -101,3 +102,4 @@ def post_worker_init(worker):
     install_telegram_bot(worker.wsgi)
     install_procurement_diagnostics(worker.wsgi)
     install_staff_diagnostics(worker.wsgi)
+    install_staff_analytics(worker.wsgi)
