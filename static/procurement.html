@@ -251,12 +251,14 @@ async function loadSupplierHistory(){
     const sourceLabel=meta.sourceLabel||'iiko';
     const noOlder=oldest&&days>30&&new Date(oldest)>new Date(Date.now()-days*86400000+3*86400000);
     await finishSupplierProgress(true);
-    if(source==='incomingInvoice'){
+    if(source==='iikoWebIncomingInvoice'||source==='incomingInvoice'){
       statusBox.className='supplier-inline-loading success';
-      statusBox.textContent='Готово: период '+days+' дней загружен из приходных накладных iiko. '+Number(s.productsCount||0)+' позиций, '+Number(s.deliveries||0)+' поставок, '+points+' ценовых точек.'+extra+aliasNote+(noOlder?' Более ранних приходных накладных этого поставщика за выбранный период не найдено.':'');
+      const sourceName=source==='iikoWebIncomingInvoice'?'приходных накладных iiko Public Web API':'приходных накладных iikoServer';
+      statusBox.textContent='Готово: период '+days+' дней загружен из '+sourceName+'. '+Number(s.productsCount||0)+' позиций, '+Number(s.deliveries||0)+' поставок, '+points+' ценовых точек.'+extra+aliasNote+(noOlder?' Более ранних приходных накладных этого поставщика за выбранный период не найдено.':'');
     }else{
       statusBox.className='supplier-inline-loading warning';
-      statusBox.textContent='Внимание: приходные накладные не удалось использовать, поэтому показан резервный источник '+sourceLabel+'. Он может содержать только часть истории. '+Number(s.deliveries||0)+' поставок, '+points+' ценовых точек.'+extra;
+      const technical=[meta.publicWebError,meta.incomingInvoiceError].filter(Boolean).join(' | ');
+      statusBox.textContent='Внимание: приходные накладные не удалось использовать, поэтому показан резервный источник '+sourceLabel+'. Он может содержать только часть истории. '+Number(s.deliveries||0)+' поставок, '+points+' ценовых точек.'+extra+(technical?' Техническая причина: '+technical.slice(0,420):'');
     }
     button.textContent='Период загружен';
     setTimeout(()=>{if(!button.disabled)button.textContent='Загрузить период'},1400);
