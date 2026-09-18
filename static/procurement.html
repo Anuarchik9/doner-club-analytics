@@ -113,24 +113,31 @@ const $=id=>document.getElementById(id);
 const money=new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2});
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function status(el,ok,yes,no){el.textContent=ok?yes:no;el.className='value '+(ok?'ok':'warn')}
-async function getJson(url,attempt=0){
+async function getJson(url,attempt=0,timeoutMs=120000){
   let r,t;
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
-    r=await fetch(url,{headers:{Accept:'application/json'},cache:'no-store'});
+    r=await fetch(url,{headers:{Accept:'application/json'},cache:'no-store',signal:controller.signal});
     t=await r.text();
   }catch(e){
-    if(attempt<1){await new Promise(x=>setTimeout(x,900));return getJson(url,attempt+1)}
+    clearTimeout(timer);
+    if(e?.name==='AbortError')throw new Error('Сервер не успел ответить за 2 минуты. Запрос остановлен — попробуйте ещё раз или выберите меньший период.');
+    if(attempt<1){await new Promise(x=>setTimeout(x,900));return getJson(url,attempt+1,timeoutMs)}
     throw new Error('Не удалось связаться с сервером. Повторите запрос через несколько секунд.');
+  }finally{
+    clearTimeout(timer);
   }
   let j=null;
   try{j=JSON.parse(t)}catch(_){}
   if(!j){
-    if(attempt<1&&(r.status>=500||r.status===200)){await new Promise(x=>setTimeout(x,900));return getJson(url,attempt+1)}
+    if(attempt<1&&(r.status>=500||r.status===200)){await new Promise(x=>setTimeout(x,900));return getJson(url,attempt+1,timeoutMs)}
     throw new Error(r.status>=500?'iikoServer временно не ответил. Повторите запрос через несколько секунд.':'Не удалось получить данные. Обновите страницу и повторите запрос.');
   }
   if(!r.ok||j.success===false)throw new Error(j.details||j.message||('HTTP '+r.status));
   return j;
 }
+
 function renderList(root, items){
   if(!items.length){root.innerHTML='<div class="empty">Не найдено</div>';return}
   root.innerHTML=items.map(x=>'<div class="list-row"><strong>'+esc(x.title)+'</strong><span>'+esc(x.text)+'</span></div>').join('')
