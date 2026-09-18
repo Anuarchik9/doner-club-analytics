@@ -2268,12 +2268,23 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
             _history_cache_set(cache_key, result)
             return result
 
+        probe_rows = (cloud_meta.get("probeMeta") or []) if cloud_meta else []
+        probed = len(probe_rows)
+        resolved = len([row for row in probe_rows if row.get("match")])
+        candidate_names = []
+        for row in probe_rows:
+            name = _norm(row.get("actualSupplierName"))
+            if name and name not in candidate_names:
+                candidate_names.append(name)
+            if len(candidate_names) >= 5:
+                break
         cloud_error = (
             "iikoCloud incoming_invoice returned no usable rows"
             + (
-                f"; listed={cloud_meta.get('listedDocuments')}, matched={cloud_meta.get('matchedDocuments')}, details={cloud_meta.get('detailDocuments')}"
+                f"; listed={cloud_meta.get('listedDocuments')}, matched={cloud_meta.get('matchedDocuments')}, details={cloud_meta.get('detailDocuments')}, probedIds={probed}, resolvedIds={resolved}"
                 if cloud_meta else ""
             )
+            + (f"; probeNames={', '.join(candidate_names)}" if candidate_names else "")
         )
     except Exception as error:
         cloud_error = str(error)
