@@ -21,6 +21,67 @@
 .product-picker{margin-top:18px}.product-picker-title{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:9px}.product-picker-title b{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:#8f8f89}.product-picker-title span{font-size:12px;color:#666}.product-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:9px}.product-choice{border:1px solid #2d2d2d;border-radius:14px;background:#0d0d0d;color:#fff;padding:14px 15px;text-align:left;cursor:pointer;transition:.14s ease}.product-choice:hover{border-color:#4d416a;background:#121016}.product-choice.active{border-color:#8a5cff;background:rgba(138,92,255,.10);box-shadow:0 0 0 2px rgba(138,92,255,.10)}.product-choice strong{display:block;font-size:15px;line-height:1.35}.product-choice small{display:block;margin-top:8px;color:#999;font-size:12px;line-height:1.45}.product-choice .pc-price{color:#cbbcff;font-weight:850}.chart-heading{display:flex;align-items:end;justify-content:space-between;gap:14px;margin:18px 2px 8px}.chart-heading h3{margin:0;font-size:20px}.chart-heading span{color:#888;font-size:12px}.product-select-wrap{display:none}
 @media(max-width:900px){.cards{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.supplier-grid{grid-template-columns:1fr}.modal-controls{grid-template-columns:1fr}.price-stats{grid-template-columns:1fr 1fr}.tech-grid{grid-template-columns:1fr}.rise-summary{grid-template-columns:1fr 1fr}.rise-row{grid-template-columns:1fr 1fr}.rise-open{text-align:left}}
 @media(max-width:600px){.wrap{padding:0 14px 40px}.brand span{display:none}.filters{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.section{align-items:flex-start}.value{font-size:29px}.rise-summary{grid-template-columns:1fr}.rise-row{grid-template-columns:1fr}.rise-modal{padding:18px;border-radius:18px}.list-row{grid-template-columns:1fr;gap:5px}.progress-pct{font-size:20px}.supplier-card{padding:18px}.supplier-card h3{font-size:19px}.supplier-products-text{font-size:16px}.modal-backdrop{padding:8px}.supplier-modal{width:98vw;padding:18px;border-radius:18px}.modal-title{font-size:27px}.modal-meta{font-size:12px}.modal-products-copy span{font-size:17px}.price-chart{height:300px}.price-stats{grid-template-columns:1fr 1fr}.supplier-period-box{grid-template-columns:1fr}}
+
+/* Desktop sizing is fixed in the initial HTML/CSS so the page paints large
+   immediately. Do not move this sizing into JavaScript: that caused a small
+   first frame followed by a visible resize on refresh. */
+@media (min-width:1100px){
+  body{font-size:16px}
+  .wrap{max-width:1720px;padding:0 38px 72px}
+  .top{height:88px}
+  .logo{width:52px;height:52px;flex-basis:52px}
+  .brand{gap:15px}.brand b{font-size:16px}.brand small{font-size:12px}
+  .source{font-size:12px;padding:8px 13px}
+
+  .hero{padding:48px 0 30px}
+  .eyebrow{font-size:12px}
+  h1{font-size:clamp(54px,4.5vw,80px);margin:9px 0 11px}
+  .hero p{max-width:1080px;font-size:15px;line-height:1.65}
+
+  .filters{gap:14px;padding:19px;border-radius:22px}
+  .field label{font-size:11px;margin-bottom:8px}
+  .field select{height:52px;border-radius:13px;padding:0 15px;font-size:14px}
+  .go{height:52px;border-radius:13px;padding:0 27px;font-size:14px}
+
+  .section{margin:34px 0 14px}
+  .section h2{font-size:23px}
+  .muted{font-size:13px}
+
+  .cards{gap:15px}
+  .card{min-height:172px;padding:23px}
+  .label{font-size:13px}
+  .value{font-size:37px;margin-top:20px}
+  .value.name{font-size:27px}
+  .sub{font-size:12px;margin-top:11px}
+  .card-link-hint{font-size:12px;margin-top:13px}
+
+  .panel{padding:23px}
+  .panel h3{font-size:18px}
+  .supplier-grid{gap:15px}
+  .supplier-card{padding:25px}
+  .supplier-card h3{font-size:24px}
+  .supplier-kind{font-size:10px;padding:6px 9px}
+  .supplier-meta{font-size:12px;margin-top:12px}
+  .supplier-products-label{font-size:11px;margin-top:22px}
+  .supplier-products-text{font-size:20px}
+  .supplier-open{font-size:12px;margin-top:20px}
+
+  .tablebox table{min-width:980px}
+  .tablebox th{font-size:11px;padding:14px 11px}
+  .tablebox td{font-size:14px;padding:15px 11px}
+  .purchase-more{height:46px;font-size:13px}
+  .empty{font-size:13px;padding:38px}
+  .note{font-size:13px;padding:17px 19px}
+
+  .loading{padding:19px 20px}
+  .progress-title{font-size:14px}
+  .progress-pct{font-size:25px}
+  .progress-stage{font-size:12px}
+  .progress-meta{font-size:11px}
+
+  .tech-details summary{font-size:12px;padding:16px 18px}
+}
+
 </style>
 </head>
 <body>
