@@ -564,17 +564,19 @@ def _cloud_counteragents_for_org(organization_id, supplier_name):
         for item in chunk:
             if not isinstance(item, dict):
                 continue
-            if item.get("deleted"):
-                continue
-            if item.get("supplier") is False:
-                continue
+            # Historical incoming invoices can still point to an archived/deleted
+            # counteragent card. For history we must keep every card whose name
+            # matches the selected supplier, even if the current card is disabled
+            # or no longer marked as a supplier.
             cid = _norm(item.get("id"))
             name = _norm(item.get("name"))
             if cid and name and _supplier_alias_match(name, supplier_name):
                 result.append({
                     "id": cid,
                     "name": name,
-                    "supplier": bool(item.get("supplier", True)),
+                    "supplier": bool(item.get("supplier", False)),
+                    "deleted": bool(item.get("deleted", False)),
+                    "active": not bool(item.get("deleted", False)),
                 })
         if len(chunk) < 500:
             break
