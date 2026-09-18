@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import requests
 
 import app as core
+from flask import jsonify, request
 from revisions_data_v2 import _allowed, _field_map
 
 
@@ -321,3 +322,28 @@ def diagnostics_text(result):
                 .replace(",", " ")
             )
     return "\n".join(lines)
+
+
+def install_procurement_diagnostics(app):
+    if getattr(app, "_doner_procurement_diagnostics_installed", False):
+        return
+    app._doner_procurement_diagnostics_installed = True
+
+    @app.route("/procurement-diagnostics", methods=["GET"], endpoint="procurement_diagnostics_api")
+    def procurement_diagnostics_api():
+        try:
+            days = int(request.args.get("days") or 180)
+            return jsonify(build_procurement_diagnostics(days))
+        except ValueError:
+            return jsonify({"success": False, "message": "days must be an integer"}), 400
+        except requests.Timeout:
+            return jsonify({
+                "success": False,
+                "message": "iikoServer did not answer in time. Retry in a few seconds.",
+            }), 504
+        except Exception as error:
+            return jsonify({
+                "success": False,
+                "message": "Не удалось проверить данные поставщиков и закупок в iiko",
+                "details": str(error),
+            }), 502
