@@ -611,8 +611,6 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
                 "organization": org.get("name"),
                 "error": str(error)[:350],
             })
-        # If the OLAP-selected supplier UUID exists in this organization, keep it
-        # only when the counteragent catalog also resolves it to the selected name.
         org_aliases[oid] = aliases
         for item in aliases:
             alias_meta.append({
@@ -620,6 +618,7 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
                 "organization": org.get("name"),
                 "id": item.get("id"),
                 "name": item.get("name"),
+                "deleted": item.get("deleted"),
             })
 
     allowed_ids = {
@@ -636,6 +635,7 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
     summaries = []
     org_meta = []
     errors = []
+    probe_meta = []
 
     for org in organizations:
         oid = org["organizationId"]
@@ -647,11 +647,16 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
                 "organization": org.get("name"),
                 "listedDocuments": 0,
                 "matchedDocuments": 0,
+                "probedSupplierIds": 0,
+                "resolvedSupplierIds": 0,
             })
             continue
 
         listed = 0
         matched = 0
+        all_docs = []
+        supplier_id_counts = {}
+
         for chunk_from, chunk_to in _date_chunks(date_from, date_to, 180):
             try:
                 data = _cloud_post(
@@ -666,12 +671,12 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
                     if doc.get("deleted"):
                         continue
                     sid, _sname = _json_supplier_info(doc)
+                    all_docs.append((doc, sid))
                     if sid:
-                        if sid not in ids:
-                            continue
-                    # If the summary omits supplier, detail fetch below will verify.
-                    summaries.append((org, doc, ids))
-                    matched += 1
+                        supplier_id_counts[sid] = supplier_id_counts.get(sid, 0) + 1
+                    if sid and sid in ids:
+                        summaries.append((org, doc, ids))
+                        matched += 1
             except Exception as error:
                 errors.append({
                     "organizationId": oid,
@@ -680,11 +685,85 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
                     "to": chunk_to,
                     "error": str(error)[:400],
                 })
+
+        # Some iikoCloud builds use a different supplier identifier in the list
+        # endpoint than in counteragents/list. If no list row matched the known
+        # supplier IDs, inspect one document per unique supplier ID and resolve
+        # the actual supplier identity from the invoice detail.
+        resolved_summary_ids = set()
+        if matched == 0 and all_docs:
+            reps = {}
+            for doc, sid in all_docs:
+                if sid and sid not in reps:
+                    reps[sid] = doc
+                if len(reps) >= 40:
+                    break
+
+            def probe_supplier(pair):
+                summary_sid, doc = pair
+                document_id = _norm(doc.get("documentId") or doc.get("id"))
+                if not document_id:
+                    return summary_sid, "", "", None
+                try:
+                    detail = _cloud_post(
+                        "/api/inventory/v1/incoming_invoice/get",
+                        {"organizationId": oid, "documentId": document_id},
+                        timeout=40,
+                        retries=1,
+                    )
+                    inv = detail.get("incomingInvoice", detail) if isinstance(detail, dict) else {}
+                    actual_id, actual_name = _json_supplier_info(inv if isinstance(inv, dict) else {})
+                    if not actual_id and not actual_name:
+                        actual_id, actual_name = _json_supplier_info(doc)
+                    is_match = (
+                        (actual_id and actual_id in ids)
+                        or (actual_id and supplier_id and actual_id == supplier_id)
+                        or (actual_name and _supplier_alias_match(actual_name, supplier_name))
+                    )
+                    return summary_sid, actual_id, actual_name, bool(is_match)
+                except Exception as error:
+                    return summary_sid, "", "", str(error)[:250]
+
+            if reps:
+                workers = min(4, len(reps))
+                with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="supplier-probe") as executor:
+                    futures = {
+                        executor.submit(probe_supplier, pair): pair[0]
+                        for pair in reps.items()
+                    }
+                    for future in as_completed(futures):
+                        summary_sid, actual_id, actual_name, result = future.result()
+                        probe_meta.append({
+                            "organizationId": oid,
+                            "organization": org.get("name"),
+                            "summarySupplierId": summary_sid,
+                            "documents": supplier_id_counts.get(summary_sid, 0),
+                            "actualSupplierId": actual_id,
+                            "actualSupplierName": actual_name,
+                            "match": result is True,
+                            "error": result if isinstance(result, str) else "",
+                        })
+                        if result is True:
+                            resolved_summary_ids.add(summary_sid)
+
+            if resolved_summary_ids:
+                for doc, sid in all_docs:
+                    if sid in resolved_summary_ids:
+                        summaries.append((org, doc, ids | resolved_summary_ids))
+                        matched += 1
+
         org_meta.append({
             "organizationId": oid,
             "organization": org.get("name"),
             "listedDocuments": listed,
             "matchedDocuments": matched,
+            "probedSupplierIds": len({x.get("summarySupplierId") for x in probe_meta if x.get("organizationId") == oid}),
+            "resolvedSupplierIds": len(resolved_summary_ids),
+            "supplierIdSamples": sorted(
+                supplier_id_counts.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:12],
         })
 
     if not summaries:
@@ -692,6 +771,7 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
             "organizations": org_meta,
             "aliases": alias_meta,
             "aliasErrors": alias_errors,
+            "probeMeta": probe_meta[:40],
             "errors": errors,
             "listedDocuments": sum(x["listedDocuments"] for x in org_meta),
             "matchedDocuments": 0,
@@ -715,17 +795,22 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
             actual_id, actual_name = _json_supplier_info(inv if isinstance(inv, dict) else {})
             if not actual_id:
                 actual_id, actual_name = _json_supplier_info(doc)
+
+            # A resolved summary-ID is allowed only because its representative
+            # detail already proved the supplier identity. Otherwise verify the
+            # detail itself.
+            summary_sid, _summary_name = _json_supplier_info(doc)
+            summary_proven = summary_sid in ids
             if actual_id:
-                if actual_id not in ids:
+                if actual_id not in ids and not summary_proven:
                     return [], None
             elif actual_name:
-                if not _supplier_alias_match(actual_name, supplier_name):
+                if not _supplier_alias_match(actual_name, supplier_name) and not summary_proven:
                     return [], None
-            else:
+            elif not summary_proven:
                 return [], None
 
-            # Parse with the exact supplier identity proven above.
-            proven_id = actual_id or next(iter(ids))
+            proven_id = actual_id or summary_sid or next(iter(ids))
             rows = _cloud_invoice_to_rows(
                 doc,
                 detail,
@@ -775,6 +860,7 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
         "organizations": org_meta,
         "aliases": alias_meta,
         "aliasErrors": alias_errors,
+        "probeMeta": probe_meta[:40],
         "errors": errors[:20],
         "detailErrors": detail_errors[:20],
         "listedDocuments": sum(x["listedDocuments"] for x in org_meta),
