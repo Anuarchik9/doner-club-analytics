@@ -1682,7 +1682,7 @@ def build_procurement_diagnostics(days=180):
                 positive_incoming_rows += 1
 
             unit_price = incoming_sum / amount if amount and incoming_sum else avg_sum
-            if unit_price > 0 and len(price_evidence) < 12:
+            if unit_price > 0:
                 supplier_type = _norm(row.get(supplier_type_field)) if supplier_type_field else ""
                 if not supplier_type_field or _supplier_type_ok(supplier_type):
                     price_evidence.append({
@@ -1698,6 +1698,16 @@ def build_procurement_diagnostics(days=180):
                         "unitPrice": round(unit_price, 4),
                         "transaction": _norm(row.get(tx_field)) if tx_field else "",
                     })
+
+        price_evidence.sort(
+            key=lambda item: (
+                item.get("date") or "",
+                item.get("document") or "",
+                item.get("product") or "",
+            ),
+            reverse=True,
+        )
+        latest_purchases = price_evidence[:12]
 
         supplier_values = {supplier_name_field: supplier_names}
         if supplier_type_field:
@@ -1726,7 +1736,7 @@ def build_procurement_diagnostics(days=180):
                 "supplierValues": supplier_values,
                 "transactionValues": tx_values[:50],
                 "priceRowsFound": len(price_evidence),
-                "priceSamples": price_evidence,
+                "priceSamples": latest_purchases,
                 "suppliers": supplier_rollup,
                 "suppliersCount": len(supplier_rollup),
             },
