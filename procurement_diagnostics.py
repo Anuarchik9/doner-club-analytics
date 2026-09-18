@@ -103,6 +103,184 @@ def _purchase_marker(row, inspect_fields):
     return any(token in text for token in PURCHASE_TOKENS)
 
 
+def _supplier_name_field(fields):
+    preferred = (
+        "Counteragent.Name",
+        "Supplier.Name",
+        "Provider.Name",
+        "Vendor.Name",
+        "Contractor.Name",
+        "Contr-Counteragent.Name",
+        "Counteragent",
+        "Supplier",
+    )
+    direct = _pick(fields, preferred)
+    if direct:
+        return direct
+    candidates = []
+    for name in sorted(fields):
+        low = name.lower()
+        if (
+            any(token in low for token in ("counteragent", "supplier", "vendor", "provider", "contractor", "contragent"))
+            and "name" in low
+            and "type" not in low
+            and "id" not in low
+            and _allowed(fields, name, "groupingAllowed")
+        ):
+            score = 0
+            if "counteragent" in low:
+                score += 5
+            if low.endswith(".name"):
+                score += 3
+            if "account" in low:
+                score -= 2
+            candidates.append((score, name))
+    return sorted(candidates, reverse=True)[0][1] if candidates else None
+
+
+def _supplier_type_field(fields):
+    return _pick(fields, (
+        "Account.CounteragentType",
+        "Counteragent.Type",
+        "CounteragentType",
+        "Supplier.Type",
+    ))
+
+
+def _supplier_type_ok(value):
+    text = _norm(value).upper()
+    if not text:
+        return True
+    return text in {"SUPPLIER", "INTERNAL_SUPPLIER"} or "SUPPLIER" in text
+
+
+def _valid_supplier_name(value):
+    text = _norm(value)
+    if not text:
+        return False
+    upper = text.upper()
+    if upper in {"NONE", "SUPPLIER", "INTERNAL_SUPPLIER", "EMPLOYEE", "UNKNOWN", "NULL"}:
+        return False
+    if re.fullmatch(r"[0-9a-fA-F-]{24,}", text):
+        return False
+    return True
+
+
+def _supplier_rollup(rows, date_field, document_field, product_field, unit_field, supplier_name_field, supplier_type_field):
+    suppliers = {}
+    for row in rows:
+        supplier_type = _norm(row.get(supplier_type_field)) if supplier_type_field else ""
+        supplier_name = _norm(row.get(supplier_name_field)) if supplier_name_field else ""
+        if not _supplier_type_ok(supplier_type) or not _valid_supplier_name(supplier_name):
+            continue
+
+        amount = abs(_num(row.get("Amount.In")))
+        incoming_sum = abs(_num(row.get("Sum.Incoming")))
+        avg_sum = abs(_num(row.get("Product.AvgSum")))
+        if amount <= 0 and incoming_sum <= 0:
+            continue
+        unit_price = incoming_sum / amount if amount and incoming_sum else avg_sum
+        if unit_price <= 0:
+            continue
+
+        date_value = _norm(row.get(date_field))[:10]
+        product_name = _norm(row.get(product_field)) if product_field else ""
+        if not date_value or not product_name:
+            continue
+        unit = _norm(row.get(unit_field)) if unit_field else ""
+        document = _norm(row.get(document_field)) if document_field else ""
+
+        supplier = suppliers.setdefault(supplier_name, {
+            "name": supplier_name,
+            "type": supplier_type or "SUPPLIER",
+            "totalSpend": 0.0,
+            "totalQuantity": 0.0,
+            "documents": set(),
+            "lastDelivery": "",
+            "products": {},
+        })
+        supplier["totalSpend"] += incoming_sum
+        supplier["totalQuantity"] += amount
+        if document:
+            supplier["documents"].add(f"{date_value}|{document}")
+        if date_value > supplier["lastDelivery"]:
+            supplier["lastDelivery"] = date_value
+
+        product = supplier["products"].setdefault(product_name, {
+            "name": product_name,
+            "unit": unit,
+            "totalSpend": 0.0,
+            "totalQuantity": 0.0,
+            "history": {},
+        })
+        product["totalSpend"] += incoming_sum
+        product["totalQuantity"] += amount
+        if unit and not product["unit"]:
+            product["unit"] = unit
+        day = product["history"].setdefault(date_value, {"sum": 0.0, "quantity": 0.0, "fallback": []})
+        day["sum"] += incoming_sum
+        day["quantity"] += amount
+        if unit_price:
+            day["fallback"].append(unit_price)
+
+    result = []
+    for supplier in suppliers.values():
+        products = []
+        for product in supplier["products"].values():
+            history = []
+            for date_value, values in sorted(product["history"].items()):
+                price = values["sum"] / values["quantity"] if values["quantity"] and values["sum"] else (
+                    sum(values["fallback"]) / len(values["fallback"]) if values["fallback"] else 0
+                )
+                if price <= 0:
+                    continue
+                history.append({
+                    "date": date_value,
+                    "price": round(price, 2),
+                    "quantity": round(values["quantity"], 4),
+                    "sum": round(values["sum"], 2),
+                })
+            if not history:
+                continue
+            current = history[-1]
+            previous = history[-2] if len(history) > 1 else None
+            change = None
+            change_pct = None
+            if previous and previous["price"]:
+                change = round(current["price"] - previous["price"], 2)
+                change_pct = round(change / previous["price"] * 100, 2)
+            prices = [x["price"] for x in history]
+            products.append({
+                "name": product["name"],
+                "unit": product["unit"],
+                "totalSpend": round(product["totalSpend"], 2),
+                "totalQuantity": round(product["totalQuantity"], 4),
+                "currentPrice": current["price"],
+                "previousPrice": previous["price"] if previous else None,
+                "change": change,
+                "changePct": change_pct,
+                "lastDate": current["date"],
+                "minPrice": min(prices),
+                "maxPrice": max(prices),
+                "history": history,
+            })
+        products.sort(key=lambda item: (-item["totalSpend"], item["name"].lower()))
+        if not products:
+            continue
+        result.append({
+            "name": supplier["name"],
+            "type": supplier["type"],
+            "totalSpend": round(supplier["totalSpend"], 2),
+            "totalQuantity": round(supplier["totalQuantity"], 4),
+            "deliveries": len(supplier["documents"]),
+            "lastDelivery": supplier["lastDelivery"],
+            "productsCount": len(products),
+            "products": products,
+        })
+    result.sort(key=lambda item: (-item["totalSpend"], item["name"].lower()))
+    return result
+
+
 def build_procurement_diagnostics(days=180):
     days = max(30, min(int(days or 180), 730))
     today = datetime.now(core.LOCAL_TZ).date()
@@ -133,6 +311,8 @@ def build_procurement_diagnostics(days=180):
         document_field = _pick(fields, ("Document", "Document.Number", "Document.Num"))
 
         supplier_fields = _field_candidates(fields, SUPPLIER_TOKENS)
+        supplier_name_field = _supplier_name_field(fields)
+        supplier_type_field = _supplier_type_field(fields)
         # Contr-* fields are useful on older iiko builds even when they are not
         # explicitly named Supplier/Counteragent.
         fallback_counterparty = [
@@ -143,8 +323,8 @@ def build_procurement_diagnostics(days=180):
             if name in fields and _allowed(fields, name, "groupingAllowed")
         ]
         counterparty_fields = []
-        for name in supplier_fields + fallback_counterparty:
-            if name not in counterparty_fields:
+        for name in [supplier_name_field, supplier_type_field, *supplier_fields, *fallback_counterparty]:
+            if name and name not in counterparty_fields:
                 counterparty_fields.append(name)
 
         product_field = _pick(fields, ("Product.Name", "Contr-Product.Name"))
@@ -193,19 +373,36 @@ def build_procurement_diagnostics(days=180):
                 positive_incoming_rows += 1
 
         price_evidence = []
+        supplier_rollup = []
         if product_field:
             detail_groups = []
-            for name in [date_field, tx_field, document_field, *counterparty_fields[:3], product_field, unit_field]:
+            for name in [
+                date_field,
+                tx_field,
+                document_field,
+                supplier_name_field,
+                supplier_type_field,
+                product_field,
+                unit_field,
+            ]:
                 if name and name not in detail_groups and _allowed(fields, name, "groupingAllowed"):
                     detail_groups.append(name)
 
-            detail_from = (today - timedelta(days=min(days, 60))).isoformat()
             detail_rows = _olap(
                 base_url, token,
                 detail_groups,
                 aggregate_fields,
-                _date_filter(date_field, detail_from, date_to),
-                timeout=105,
+                _date_filter(date_field, date_from, date_to),
+                timeout=120,
+            )
+            supplier_rollup = _supplier_rollup(
+                detail_rows,
+                date_field,
+                document_field,
+                product_field,
+                unit_field,
+                supplier_name_field,
+                supplier_type_field,
             )
             for row in detail_rows:
                 amount = abs(_num(row.get("Amount.In")))
@@ -216,19 +413,16 @@ def build_procurement_diagnostics(days=180):
                 unit_price = incoming_sum / amount if amount and incoming_sum else avg_sum
                 if unit_price <= 0:
                     continue
-                supplier = ""
-                supplier_field = None
-                for field in counterparty_fields:
-                    value = _norm(row.get(field))
-                    if value:
-                        supplier = value
-                        supplier_field = field
-                        break
+                supplier = _norm(row.get(supplier_name_field)) if supplier_name_field else ""
+                supplier_type = _norm(row.get(supplier_type_field)) if supplier_type_field else ""
+                if supplier_type_field and not _supplier_type_ok(supplier_type):
+                    continue
                 price_evidence.append({
                     "date": _norm(row.get(date_field))[:10],
                     "document": _norm(row.get(document_field)) if document_field else "",
                     "supplier": supplier,
-                    "supplierField": supplier_field,
+                    "supplierType": supplier_type,
+                    "supplierField": supplier_name_field,
                     "product": _norm(row.get(product_field)),
                     "unit": _norm(row.get(unit_field)) if unit_field else "",
                     "quantity": round(amount, 4),
@@ -258,6 +452,8 @@ def build_procurement_diagnostics(days=180):
                 "product": product_field,
                 "unit": unit_field,
                 "supplierNamedFields": likely_supplier_fields,
+                "supplierNameField": supplier_name_field,
+                "supplierTypeField": supplier_type_field,
                 "counterpartyFallbackFields": fallback_with_values,
                 "incomingAggregates": aggregate_fields,
             },
@@ -271,11 +467,17 @@ def build_procurement_diagnostics(days=180):
                 "transactionValues": tx_values[:50],
                 "priceRowsFound": len(price_evidence),
                 "priceSamples": price_evidence[:12],
+                "suppliers": supplier_rollup,
+                "suppliersCount": len(supplier_rollup),
             },
             "capability": {
-                "canBuildSupplierList": bool(likely_supplier_fields or fallback_with_values),
-                "canBuildPurchasePriceHistory": bool(price_evidence),
-                "canBuildProductSupplierMatrix": bool(price_evidence and (likely_supplier_fields or fallback_with_values)),
+                "canBuildSupplierList": bool(supplier_rollup),
+                "canBuildPurchasePriceHistory": any(
+                    len(product.get("history") or []) > 1
+                    for supplier in supplier_rollup
+                    for product in supplier.get("products") or []
+                ),
+                "canBuildProductSupplierMatrix": bool(supplier_rollup),
             },
             "note": (
                 "Diagnostics only. Counterparty/account fields are treated as candidates until "
