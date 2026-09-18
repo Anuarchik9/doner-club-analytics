@@ -233,6 +233,39 @@ def _parse_attendance(nodes, now):
     return result
 
 
+def _period_bounds(date_from, date_to):
+    start = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=core.LOCAL_TZ)
+    end = datetime.strptime(date_to, "%Y-%m-%d").replace(
+        hour=23, minute=59, second=59, tzinfo=core.LOCAL_TZ
+    )
+    return start, end
+
+
+def _attendance_in_period(item, period_start, period_end, now):
+    start = _parse_dt(item.get("dateFrom"))
+    end = _parse_dt(item.get("dateTo"))
+    if not start:
+        return False
+    if end:
+        return start <= period_end and end >= period_start
+    # iikoServer can return ancient unfinished attendances regardless of the
+    # requested period. Count an open attendance only when it actually started
+    # inside the selected period and is still plausibly an active shift.
+    if not (period_start <= start <= period_end):
+        return False
+    return (now - start).total_seconds() <= 30 * 60 * 60
+
+
+def _schedule_in_period(item, period_start, period_end):
+    start = _parse_dt(item.get("dateFrom"))
+    end = _parse_dt(item.get("dateTo"))
+    if not start:
+        return False
+    if not end:
+        return period_start <= start <= period_end
+    return start <= period_end and end >= period_start
+
+
 def _parse_schedule(nodes):
     result = []
     for node in nodes:
@@ -366,8 +399,17 @@ def build_staff_analytics(date_from, date_to):
         roles_by_id, roles_by_code = _parse_roles(_xml_nodes(roles_response, "role"))
         salaries = _parse_salaries(_xml_nodes(salary_response, "salary"))
         now = datetime.now(core.LOCAL_TZ)
-        attendance = _parse_attendance(_xml_nodes(attendance_response, "attendance"), now)
-        schedules = _parse_schedule(schedule_nodes)
+        period_start, period_end = _period_bounds(date_from, date_to)
+        attendance_all = _parse_attendance(_xml_nodes(attendance_response, "attendance"), now)
+        schedules_all = _parse_schedule(schedule_nodes)
+        attendance = [
+            item for item in attendance_all
+            if _attendance_in_period(item, period_start, period_end, now)
+        ]
+        schedules = [
+            item for item in schedules_all
+            if _schedule_in_period(item, period_start, period_end)
+        ]
 
         late_by_employee, early_by_employee, matched_by_employee = _build_plan_variance(attendance, schedules)
 
@@ -545,6 +587,7 @@ def build_staff_analytics(date_from, date_to):
                 "paidHours": round(total_paid_hours, 2),
                 "overtimeHours": round(total_overtime_hours, 2),
                 "payment": round(total_payment, 2),
+                "payrollAvailable": bool(total_payment > 0),
                 "paymentPerActualHour": round(total_payment / total_hours, 2) if total_hours > 0 and total_payment else None,
                 "averageAttendanceHours": round(total_hours / len(attendance), 2) if attendance else 0,
                 "openAttendances": open_attendances,
@@ -563,6 +606,10 @@ def build_staff_analytics(date_from, date_to):
                 ),
                 "scheduleError": schedule_error,
                 "salesByEmployeeAvailable": False,
+                "rawAttendanceRows": len(attendance_all),
+                "filteredAttendanceRows": len(attendance),
+                "rawScheduleRows": len(schedules_all),
+                "filteredScheduleRows": len(schedules),
                 "note": "iiko SALES OLAP does not expose employee-linked sales fields for this installation.",
             },
         }
