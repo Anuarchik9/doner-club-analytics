@@ -217,9 +217,11 @@ def _supplier_rollup(rows, date_field, document_field, product_field, unit_field
         product["totalQuantity"] += amount
         if unit and not product["unit"]:
             product["unit"] = unit
-        day = product["history"].setdefault(date_value, {"sum": 0.0, "quantity": 0.0, "fallback": []})
+        day = product["history"].setdefault(date_value, {"sum": 0.0, "quantity": 0.0, "fallback": [], "documents": set()})
         day["sum"] += incoming_sum
         day["quantity"] += amount
+        if document:
+            day["documents"].add(document)
         if unit_price:
             day["fallback"].append(unit_price)
 
@@ -239,6 +241,7 @@ def _supplier_rollup(rows, date_field, document_field, product_field, unit_field
                     "price": round(price, 2),
                     "quantity": round(values["quantity"], 4),
                     "sum": round(values["sum"], 2),
+                    "documents": sorted(values.get("documents") or []),
                 })
             if not history:
                 continue
