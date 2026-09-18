@@ -204,6 +204,17 @@ def _supplier_type_field(fields):
     ))
 
 
+def _supplier_id_field(fields):
+    return _pick(fields, (
+        "Counteragent.Id",
+        "Supplier.Id",
+        "Provider.Id",
+        "Vendor.Id",
+        "Contractor.Id",
+        "Contr-Counteragent.Id",
+    ))
+
+
 def _supplier_type_ok(value):
     text = _norm(value).upper()
     if not text:
@@ -223,11 +234,12 @@ def _valid_supplier_name(value):
     return True
 
 
-def _supplier_rollup(rows, date_field, document_field, product_field, unit_field, supplier_name_field, supplier_type_field):
+def _supplier_rollup(rows, date_field, document_field, product_field, unit_field, supplier_name_field, supplier_type_field, supplier_id_field=None):
     suppliers = {}
     for row in rows:
         supplier_type = _norm(row.get(supplier_type_field)) if supplier_type_field else ""
         supplier_name = _norm(row.get(supplier_name_field)) if supplier_name_field else ""
+        supplier_id = _norm(row.get(supplier_id_field)) if supplier_id_field else ""
         if not _supplier_type_ok(supplier_type) or not _valid_supplier_name(supplier_name):
             continue
 
@@ -247,7 +259,9 @@ def _supplier_rollup(rows, date_field, document_field, product_field, unit_field
         unit = _norm(row.get(unit_field)) if unit_field else ""
         document = _norm(row.get(document_field)) if document_field else ""
 
-        supplier = suppliers.setdefault(supplier_name, {
+        supplier_key = supplier_id or supplier_name.casefold()
+        supplier = suppliers.setdefault(supplier_key, {
+            "id": supplier_id,
             "name": supplier_name,
             "type": supplier_type or "SUPPLIER",
             "totalSpend": 0.0,
@@ -256,6 +270,10 @@ def _supplier_rollup(rows, date_field, document_field, product_field, unit_field
             "lastDelivery": "",
             "products": {},
         })
+        if supplier_name and (not supplier.get("name") or len(supplier_name) > len(supplier.get("name") or "")):
+            supplier["name"] = supplier_name
+        if supplier_id and not supplier.get("id"):
+            supplier["id"] = supplier_id
         supplier["totalSpend"] += incoming_sum
         supplier["totalQuantity"] += amount
         if document:
@@ -371,6 +389,7 @@ def build_procurement_diagnostics(days=180):
         document_field = _pick(fields, ("Document", "Document.Number", "Document.Num"))
         supplier_name_field = _supplier_name_field(fields)
         supplier_type_field = _supplier_type_field(fields)
+        supplier_id_field = _supplier_id_field(fields)
         product_field = _pick(fields, ("Product.Name", "Contr-Product.Name"))
         unit_field = _pick(fields, ("Product.MeasureUnit", "Contr-Product.MeasureUnit"))
 
@@ -391,6 +410,7 @@ def build_procurement_diagnostics(days=180):
             document_field,
             supplier_name_field,
             supplier_type_field,
+            supplier_id_field,
             product_field,
             unit_field,
         ]:
@@ -417,6 +437,7 @@ def build_procurement_diagnostics(days=180):
             unit_field,
             supplier_name_field,
             supplier_type_field,
+            supplier_id_field,
         )
 
         tx_values = []
@@ -484,6 +505,7 @@ def build_procurement_diagnostics(days=180):
                 "supplierNamedFields": [supplier_name_field],
                 "supplierNameField": supplier_name_field,
                 "supplierTypeField": supplier_type_field,
+                "supplierIdField": supplier_id_field,
                 "counterpartyFallbackFields": [],
                 "incomingAggregates": aggregate_fields,
             },
@@ -552,9 +574,10 @@ def diagnostics_text(result):
 
 
 
-def build_supplier_history(supplier_name, days=30):
+def build_supplier_history(supplier_name, days=30, supplier_id=""):
     supplier_name = _norm(supplier_name)
-    if not _valid_supplier_name(supplier_name):
+    supplier_id = _norm(supplier_id)
+    if not supplier_id and not _valid_supplier_name(supplier_name):
         raise ValueError("supplier is required")
 
     days = max(30, min(int(days or 30), 730))
@@ -581,6 +604,7 @@ def build_supplier_history(supplier_name, days=30):
             )
         supplier_name_field = _supplier_name_field(fields)
         supplier_type_field = _supplier_type_field(fields)
+        supplier_id_field = _supplier_id_field(fields)
         document_field = _pick(fields, ("Document", "Document.Number", "Document.Num"))
         product_field = _pick(fields, ("Product.Name", "Contr-Product.Name"))
         unit_field = _pick(fields, ("Product.MeasureUnit", "Contr-Product.MeasureUnit"))
@@ -596,17 +620,25 @@ def build_supplier_history(supplier_name, days=30):
             raise RuntimeError("No incoming amount/cost aggregates found in TRANSACTIONS")
 
         group_fields = []
-        for name in [date_field, document_field, supplier_name_field, supplier_type_field, product_field, unit_field]:
+        for name in [date_field, document_field, supplier_name_field, supplier_type_field, supplier_id_field, product_field, unit_field]:
             if name and name not in group_fields and _allowed(fields, name, "groupingAllowed"):
                 group_fields.append(name)
 
         supplier_filter = None
         server_filtered = False
-        if _allowed(fields, supplier_name_field, "filteringAllowed"):
+        filter_field = None
+        filter_value = None
+        if supplier_id and supplier_id_field and _allowed(fields, supplier_id_field, "filteringAllowed"):
+            filter_field = supplier_id_field
+            filter_value = supplier_id
+        elif supplier_name and _allowed(fields, supplier_name_field, "filteringAllowed"):
+            filter_field = supplier_name_field
+            filter_value = supplier_name
+        if filter_field:
             supplier_filter = {
-                supplier_name_field: {
+                filter_field: {
                     "filterType": "IncludeValues",
-                    "values": [supplier_name],
+                    "values": [filter_value],
                 }
             }
             server_filtered = True
@@ -642,10 +674,16 @@ def build_supplier_history(supplier_name, days=30):
                 timeout=45,
             )
 
-        rows = [
-            row for row in rows
-            if _norm(row.get(supplier_name_field)).casefold() == supplier_name.casefold()
-        ]
+        if supplier_id and supplier_id_field:
+            rows = [
+                row for row in rows
+                if _norm(row.get(supplier_id_field)) == supplier_id
+            ]
+        elif supplier_name:
+            rows = [
+                row for row in rows
+                if _norm(row.get(supplier_name_field)).casefold() == supplier_name.casefold()
+            ]
 
         suppliers = _supplier_rollup(
             rows,
@@ -655,9 +693,14 @@ def build_supplier_history(supplier_name, days=30):
             unit_field,
             supplier_name_field,
             supplier_type_field,
+            supplier_id_field,
         )
         supplier = next(
-            (item for item in suppliers if item["name"].casefold() == supplier_name.casefold()),
+            (
+                item for item in suppliers
+                if (supplier_id and item.get("id") == supplier_id)
+                or (not supplier_id and item["name"].casefold() == supplier_name.casefold())
+            ),
             None,
         )
 
@@ -701,8 +744,9 @@ def install_procurement_diagnostics(app):
     def procurement_supplier_history_api():
         try:
             supplier = request.args.get("supplier") or ""
+            supplier_id = request.args.get("supplierId") or ""
             days = int(request.args.get("days") or 30)
-            return jsonify(build_supplier_history(supplier, days))
+            return jsonify(build_supplier_history(supplier, days, supplier_id))
         except ValueError as error:
             return jsonify({"success": False, "message": str(error)}), 400
         except requests.Timeout:
