@@ -204,9 +204,9 @@ function startSupplierProgress(){
   $('supplierProgress').classList.add('show');paintSupplierProgress();
   supplierProgressTimer=setInterval(()=>{
     const elapsed=(Date.now()-supplierProgressStarted)/1000;
-    const target=elapsed<1?12:elapsed<3?30:elapsed<6?48:elapsed<10?66:elapsed<16?80:elapsed<24?90:96;
-    if(supplierProgressValue<target)supplierProgressValue+=Math.max(.5,(target-supplierProgressValue)*.14);
-    if(supplierProgressValue>97)supplierProgressValue=97;
+    const target=elapsed<1?12:elapsed<3?30:elapsed<6?48:elapsed<10?66:elapsed<16?80:elapsed<24?90:elapsed<40?96:99;
+    if(supplierProgressValue<target)supplierProgressValue+=Math.max(.22,(target-supplierProgressValue)*.11);
+    if(supplierProgressValue>99)supplierProgressValue=99;
     paintSupplierProgress();
   },180);
 }
@@ -339,6 +339,7 @@ function progressStage(p){
   if(p<55)return 'Определяем поставщиков и контрагентов';
   if(p<76)return 'Сверяем товары, суммы и количество';
   if(p<91)return 'Восстанавливаем закупочные цены';
+  if(p<98)return 'Читаем документы за большой период';
   return 'Формируем результат';
 }
 function paintProgress(){
@@ -354,9 +355,9 @@ function startProgress(){
   $('loading').classList.add('show');paintProgress();
   progressTimer=setInterval(()=>{
     const elapsed=(Date.now()-progressStart)/1000;
-    const target=elapsed<1?10:elapsed<2.5?24:elapsed<5?42:elapsed<8?58:elapsed<12?72:elapsed<18?84:elapsed<28?91:96;
-    if(progressValue<target)progressValue+=Math.max(.5,(target-progressValue)*.13);
-    if(progressValue>97)progressValue=97;
+    const target=elapsed<1?10:elapsed<2.5?24:elapsed<5?42:elapsed<8?58:elapsed<12?72:elapsed<18?84:elapsed<28?91:elapsed<45?96:99;
+    if(progressValue<target)progressValue+=Math.max(.22,(target-progressValue)*.11);
+    if(progressValue>99)progressValue=99;
     paintProgress();
   },180);
 }
