@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Проверка персонала — Doner Club Analytics</title>
+<style>
+:root{--bg:#080808;--panel:#121212;--line:#2a2a2a;--text:#f7f7f2;--muted:#8e8e88;--orange:#ff5a1f;--green:#56d79a;--red:#ff8b8b;--yellow:#f0c977}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,rgba(255,90,31,.10),transparent 30%),var(--bg);color:var(--text);font:14px Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{width:min(1500px,calc(100% - 40px));margin:0 auto;padding:34px 0 60px}
+.top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:18px}.brand{display:flex;gap:12px;align-items:center}.logo{width:44px;height:44px;border-radius:12px;background:var(--orange);display:grid;place-items:center;font-size:9px;font-weight:950;line-height:.85}.brand b{font-size:15px}.brand small{color:var(--muted)}
+.hero{padding:42px 0 20px}.eyebrow{color:var(--orange);font-weight:900;font-size:11px;letter-spacing:.08em;text-transform:uppercase}h1{font-size:52px;letter-spacing:-.05em;margin:8px 0 8px}.hero p{margin:0;color:var(--muted);max-width:900px;line-height:1.6}
+.status{margin:20px 0;padding:16px 18px;border:1px solid #3b302a;background:#15110f;border-radius:14px;color:#d7c8bf}.status.ok{border-color:#285642;background:#0d1a14;color:#93e5ba}.status.bad{border-color:#6b3030;background:#241111;color:#ffb2b2}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{border:1px solid var(--line);border-radius:18px;background:linear-gradient(160deg,#151515,#101010);padding:20px;min-height:180px}.card h3{margin:0;font-size:15px}.flag{font-size:28px;font-weight:950;margin-top:18px}.flag.ok{color:var(--green)}.flag.no{color:var(--red)}.meta{margin-top:9px;color:var(--muted);line-height:1.5;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.tag{padding:5px 8px;border:1px solid #333;border-radius:999px;color:#aaa;font-size:10px}
+.summary{margin-top:28px;border:1px solid var(--line);border-radius:18px;background:#101010;padding:20px}.summary h2{margin:0 0 14px}.rows{display:grid;gap:9px}.row{display:flex;justify-content:space-between;gap:20px;padding:11px 0;border-bottom:1px solid #222}.row:last-child{border-bottom:0}.yes{color:var(--green);font-weight:900}.no{color:var(--red);font-weight:900}.maybe{color:var(--yellow);font-weight:900}
+@media(max-width:900px){.grid{grid-template-columns:1fr 1fr}h1{font-size:42px}}@media(max-width:600px){.wrap{width:min(100% - 24px,1500px)}.grid{grid-template-columns:1fr}h1{font-size:36px}.row{flex-direction:column;gap:4px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="brand"><div class="logo">DONER<br>CLUB</div><div><b>DONER CLUB ANALYTICS</b><br><small>Диагностика данных персонала</small></div></div><a href="/static/dashboard-v2.html" style="color:#ff7a49;text-decoration:none;font-weight:850">← На главную</a></div>
+  <div class="hero"><div class="eyebrow">Проверка iiko</div><h1>Персонал и табелирование</h1><p>Проверяем только доступность данных. Эта страница ничего не меняет в iiko и не показывает имена сотрудников.</p></div>
+  <div class="status" id="status">Проверяем доступ к данным сотрудников, смен, графиков и явок…</div>
+  <div class="grid" id="cards"></div>
+  <div class="summary"><h2>Есть ли смысл строить полноценную страницу</h2><div class="rows" id="summary"></div></div>
+</div>
+<script>
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function card(title,data){
+  const ok=!!data?.ok;
+  const fields=(data?.fields||[]).slice(0,12);
+  return '<div class="card"><h3>'+esc(title)+'</h3><div class="flag '+(ok?'ok':'no')+'">'+(ok?'Доступ есть':'Нет доступа')+'</div><div class="meta">'+(ok?('Найдено записей: '+Number(data?.count||0)):('HTTP: '+esc(data?.status??'—')+(data?.error?' · '+esc(data.error):'')))+'</div>'+(fields.length?'<div class="tags">'+fields.map(x=>'<span class="tag">'+esc(x)+'</span>').join('')+'</div>':'')+'</div>';
+}
+function yn(label,value,note){
+ return '<div class="row"><span>'+esc(label)+(note?'<small style="display:block;color:#777;margin-top:3px">'+esc(note)+'</small>':'')+'</span><span class="'+(value===true?'yes':value===false?'no':'maybe')+'">'+(value===true?'ДА':value===false?'НЕТ':'ЧАСТИЧНО')+'</span></div>';
+}
+(async()=>{
+ try{
+  const r=await fetch('/staff-capability-check-20260919',{headers:{Accept:'application/json'},cache:'no-store'});
+  const j=await r.json();
+  if(!r.ok||j.success===false)throw new Error(j.message||j.details||('HTTP '+r.status));
+  const cloud=j.cloud||{},server=j.server||{},cap=j.capabilities||{};
+  document.getElementById('cards').innerHTML=[
+    card('Сотрудники — iikoCloud',cloud.employees),
+    card('Фактические смены — iikoCloud',cloud.shifts),
+    card('Плановый график — iikoCloud',cloud.schedule),
+    card('Сотрудники — iikoServer',server.employees),
+    card('Явки / фактические часы',server.attendance),
+    card('Плановые смены / расписание',server.schedule),
+    card('Должности и ставки',server.roles),
+    card('Персональные ставки / оклады',server.salary),
+    card('Продажи по сотрудникам', {ok:!!j.salesOlap?.ok,count:(j.salesOlap?.employeeFields||[]).length,fields:j.salesOlap?.employeeFields||[],status:j.salesOlap?.status})
+  ].join('');
+  document.getElementById('summary').innerHTML=
+    yn('Список сотрудников',cap.employeeDirectory)+
+    yn('Фактически отработанные часы',cap.actualHours,'Основа табеля')+
+    yn('Плановый график',cap.plannedSchedule,'Для план vs факт и опозданий')+
+    yn('Должности',cap.roles)+
+    yn('Ставки / оклады',cap.payRatesOrSalary,'Для ФОТ')+
+    yn('Начисления и оплаченные минуты',cap.paymentDetails)+
+    yn('Связь продаж с сотрудниками',cap.salesByEmployeePossible,'Для чеков/выручки по кассиру или официанту');
+  const strong=cap.employeeDirectory&&cap.actualHours;
+  document.getElementById('status').className='status '+(strong?'ok':'bad');
+  document.getElementById('status').textContent=strong
+    ?'Проверка завершена: базовые данные персонала и фактического времени доступны.'
+    :'Проверка завершена: часть ключевых данных персонала недоступна текущему API-логину.';
+ }catch(e){
+  const s=document.getElementById('status');s.className='status bad';s.textContent='Ошибка проверки: '+e.message;
+ }
+})();
+</script>
+</body>
+</html>
