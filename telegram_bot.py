@@ -9,7 +9,6 @@ from flask import jsonify, request
 
 import app as core
 import telegram_daily_report as report
-import procurement_diagnostics as procurement
 
 
 _processed_lock = threading.Lock()
@@ -56,7 +55,6 @@ def _setup_webhook():
         _telegram(token, "setMyCommands", {
             "commands": [
                 {"command": "go", "description": "Отчет за последний полный день"},
-                {"command": "supplierscan", "description": "Проверить данные поставщиков и закупочных цен"},
             ],
         })
         print("[telegram-bot] webhook and /go command configured", flush=True)
@@ -102,18 +100,6 @@ def _build_and_send(token, chat_id):
 
 
 
-def _scan_suppliers(token, chat_id):
-    try:
-        report.send(token, chat_id, "🔎 Проверяю поставщиков, приходные операции и закупочные цены в iiko…")
-        result = procurement.build_procurement_diagnostics(180)
-        report.send(token, chat_id, procurement.diagnostics_text(result))
-        print("[telegram-bot] /supplierscan complete", flush=True)
-    except Exception as exc:
-        print(f"[telegram-bot] /supplierscan failed: {exc}", flush=True)
-        try:
-            report.send(token, chat_id, f"⚠️ Проверка поставщиков завершилась ошибкой: {str(exc)[:500]}")
-        except Exception:
-            pass
 
 def install_telegram_bot(app):
     if getattr(app, "_doner_telegram_bot_installed", False):
@@ -151,16 +137,6 @@ def install_telegram_bot(app):
                 target=_build_and_send,
                 args=(token, allowed_chat_id),
                 name="telegram-go-report",
-                daemon=True,
-            )
-            thread.start()
-            return jsonify({"ok": True})
-
-        if command == "/supplierscan":
-            thread = threading.Thread(
-                target=_scan_suppliers,
-                args=(token, allowed_chat_id),
-                name="telegram-supplier-scan",
                 daemon=True,
             )
             thread.start()
