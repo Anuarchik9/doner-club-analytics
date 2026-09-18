@@ -2,6 +2,7 @@ import os
 import re
 import time
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
 import requests
@@ -348,6 +349,301 @@ def _contractor_catalog(base_url, token):
         unique[item["id"]] = item
     return list(unique.values())
 
+
+
+
+_SUPPLIER_HISTORY_CACHE = {}
+_SUPPLIER_HISTORY_TTL = 10 * 60
+
+
+def _history_cache_get(key):
+    item = _SUPPLIER_HISTORY_CACHE.get(key)
+    if not item:
+        return None
+    if item["expires_at"] <= time.time():
+        _SUPPLIER_HISTORY_CACHE.pop(key, None)
+        return None
+    return item["value"]
+
+
+def _history_cache_set(key, value):
+    _SUPPLIER_HISTORY_CACHE[key] = {
+        "value": value,
+        "expires_at": time.time() + _SUPPLIER_HISTORY_TTL,
+    }
+    if len(_SUPPLIER_HISTORY_CACHE) > 80:
+        for old_key in sorted(_SUPPLIER_HISTORY_CACHE, key=lambda k: _SUPPLIER_HISTORY_CACHE[k]["expires_at"])[:20]:
+            _SUPPLIER_HISTORY_CACHE.pop(old_key, None)
+
+
+def _cloud_post(path, payload, timeout=60, retries=3):
+    last = None
+    for attempt in range(retries + 1):
+        response = core.iiko_post(path, payload, timeout=timeout)
+        if response.status_code == 429 or response.status_code >= 500:
+            last = RuntimeError(f"{path} HTTP {response.status_code}: {response.text[:300]}")
+            if attempt < retries:
+                time.sleep(min(6.0, 0.9 * (2 ** attempt)))
+                continue
+        response.raise_for_status()
+        return response.json()
+    if last:
+        raise last
+    raise RuntimeError(f"{path} failed")
+
+
+def _cloud_allowed_organizations():
+    try:
+        data = _cloud_post(
+            "/api/1/organizations",
+            {"returnAdditionalInfo": False, "includeDisabled": False},
+            timeout=35,
+            retries=2,
+        )
+        items = data.get("organizations", []) if isinstance(data, dict) else []
+        result = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            oid = _norm(item.get("id") or item.get("organizationId"))
+            if oid:
+                result.append({
+                    "organizationId": oid,
+                    "name": _norm(item.get("name") or item.get("code") or oid),
+                })
+        if result:
+            return result
+    except Exception:
+        pass
+
+    # Fallback to the inventory organization tree already used by the site.
+    result = []
+    seen = set()
+    for item in core.get_departments():
+        oid = _norm(item.get("organizationId"))
+        if oid and oid not in seen:
+            seen.add(oid)
+            result.append({
+                "organizationId": oid,
+                "name": _norm(item.get("name") or item.get("code") or oid),
+            })
+    return result
+
+
+def _invoice_list(data):
+    if isinstance(data, list):
+        return [x for x in data if isinstance(x, dict)]
+    if isinstance(data, dict):
+        for key in ("incomingInvoices", "documents", "items", "result"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return [x for x in value if isinstance(x, dict)]
+    return []
+
+
+def _invoice_supplier_match(value, supplier_name, supplier_id):
+    if not isinstance(value, dict):
+        return True
+    sid, sname = _json_supplier_info(value)
+    if sid and supplier_id and sid == supplier_id:
+        return True
+    if sname and _supplier_alias_match(sname, supplier_name):
+        return True
+    # If the list row does not expose a supplier, detail fetch is required.
+    return not sid and not sname
+
+
+def _cloud_invoice_to_rows(document_summary, detail, supplier_name, supplier_id, products_map):
+    inv = detail.get("incomingInvoice", detail) if isinstance(detail, dict) else {}
+    if not isinstance(inv, dict):
+        return []
+
+    actual_id, actual_name = _json_supplier_info(inv)
+    if not actual_id and not actual_name:
+        actual_id, actual_name = _json_supplier_info(document_summary)
+
+    if actual_id and supplier_id and actual_id != supplier_id:
+        if not actual_name or not _supplier_alias_match(actual_name, supplier_name):
+            return []
+    elif actual_name and not _supplier_alias_match(actual_name, supplier_name):
+        return []
+
+    date_value = _normalize_invoice_date(
+        document_summary.get("date")
+        or inv.get("date")
+        or inv.get("documentDate")
+        or inv.get("dateIncoming")
+    )
+    document_number = _norm(
+        document_summary.get("documentNumber")
+        or document_summary.get("number")
+        or document_summary.get("num")
+        or inv.get("documentNumber")
+        or inv.get("number")
+        or inv.get("num")
+        or document_summary.get("documentId")
+        or inv.get("documentId")
+    )
+
+    items = inv.get("items") or []
+    rows = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        product_id = _norm(item.get("product") or item.get("productId"))
+        product_name = _norm(
+            item.get("productName")
+            or (products_map.get(product_id) or {}).get("name")
+            or product_id
+        )
+        quantity = abs(_num(item.get("amount") or item.get("quantity")))
+        line_sum = abs(_num(item.get("sum") or item.get("totalSum")))
+        unit_price = abs(_num(item.get("price")))
+        if unit_price <= 0 and quantity > 0 and line_sum > 0:
+            unit_price = line_sum / quantity
+        if line_sum <= 0 and quantity > 0 and unit_price > 0:
+            line_sum = quantity * unit_price
+        if not product_name or quantity <= 0 or unit_price <= 0:
+            continue
+        unit = _norm(
+            item.get("measureUnit")
+            or item.get("unit")
+            or item.get("unitName")
+            or item.get("measureUnitName")
+        )
+        rows.append({
+            "date": date_value,
+            "document": document_number,
+            "supplierId": supplier_id or actual_id,
+            "supplier": supplier_name or actual_name,
+            "productId": product_id,
+            "product": product_name,
+            "unit": unit,
+            "quantity": round(quantity, 6),
+            "sum": round(line_sum, 2),
+            "unitPrice": round(unit_price, 4),
+        })
+    return rows
+
+
+def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date_to):
+    organizations = _cloud_allowed_organizations()
+    if not organizations:
+        raise RuntimeError("iiko did not return organizations available to this API login")
+
+    try:
+        products_map = core.get_products_map()
+    except Exception:
+        products_map = {}
+
+    summaries = []
+    org_meta = []
+    errors = []
+
+    for org in organizations:
+        oid = org["organizationId"]
+        org_count = 0
+        for chunk_from, chunk_to in _date_chunks(date_from, date_to, 90):
+            try:
+                data = _cloud_post(
+                    "/api/inventory/v1/incoming_invoice/list",
+                    {"organizationId": oid, "from": chunk_from, "to": chunk_to},
+                    timeout=55,
+                    retries=2,
+                )
+                docs = _invoice_list(data)
+                org_count += len(docs)
+                for doc in docs:
+                    if doc.get("deleted"):
+                        continue
+                    if _invoice_supplier_match(doc, supplier_name, supplier_id):
+                        summaries.append((org, doc))
+            except Exception as error:
+                errors.append({
+                    "organizationId": oid,
+                    "organization": org.get("name"),
+                    "from": chunk_from,
+                    "to": chunk_to,
+                    "error": str(error)[:400],
+                })
+        org_meta.append({
+            "organizationId": oid,
+            "organization": org.get("name"),
+            "listedDocuments": org_count,
+        })
+
+    if not summaries:
+        return [], {
+            "organizations": org_meta,
+            "errors": errors,
+            "listedDocuments": sum(x["listedDocuments"] for x in org_meta),
+            "detailDocuments": 0,
+        }
+
+    def fetch_one(pair):
+        org, doc = pair
+        oid = org["organizationId"]
+        document_id = _norm(doc.get("documentId") or doc.get("id"))
+        if not document_id:
+            return [], {"organizationId": oid, "error": "documentId is missing"}
+        try:
+            detail = _cloud_post(
+                "/api/inventory/v1/incoming_invoice/get",
+                {"organizationId": oid, "documentId": document_id},
+                timeout=55,
+                retries=2,
+            )
+            rows = _cloud_invoice_to_rows(
+                doc,
+                detail,
+                supplier_name,
+                supplier_id,
+                products_map,
+            )
+            return rows, None
+        except Exception as error:
+            return [], {
+                "organizationId": oid,
+                "documentId": document_id,
+                "error": str(error)[:400],
+            }
+
+    all_rows = []
+    detail_errors = []
+    # Keep concurrency modest: iiko inventory endpoints can throttle aggressively.
+    workers = min(3, max(1, len(summaries)))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="supplier-invoice") as executor:
+        futures = [executor.submit(fetch_one, pair) for pair in summaries]
+        for future in as_completed(futures):
+            rows, error = future.result()
+            all_rows.extend(rows)
+            if error:
+                detail_errors.append(error)
+
+    seen = set()
+    unique_rows = []
+    for row in all_rows:
+        key = (
+            row.get("date"),
+            row.get("document"),
+            row.get("productId") or row.get("product"),
+            round(_num(row.get("quantity")), 6),
+            round(_num(row.get("sum")), 2),
+            round(_num(row.get("unitPrice")), 4),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_rows.append(row)
+
+    return unique_rows, {
+        "organizations": org_meta,
+        "errors": errors[:20],
+        "detailErrors": detail_errors[:20],
+        "listedDocuments": sum(x["listedDocuments"] for x in org_meta),
+        "detailDocuments": len(summaries),
+        "rows": len(unique_rows),
+    }
 
 
 IIKOWEB_BASE_URL = "https://public-api.iikoweb.ru"
