@@ -271,11 +271,25 @@ def main():
     args = parser.parse_args()
 
     day = args.date or (datetime.now(core.LOCAL_TZ).date() - timedelta(days=1)).isoformat()
-    rows = [collect(point, day) for point in points()]
+    report_points = points()
+    print(f"[daily-report] start date={day} points={','.join(report_points)}", flush=True)
+
+    rows = []
+    for point in report_points:
+        print(f"[daily-report] collecting point={point}", flush=True)
+        row = collect(point, day)
+        rows.append(row)
+        available = any(row.get(key) for key in ("cur", "receipt", "mix"))
+        print(
+            f"[daily-report] collected point={point} available={str(available).lower()} partial_errors={len(row.get('errors') or [])}",
+            flush=True,
+        )
+
     messages = [network_message(rows, day)] + [point_message(row) for row in rows]
 
     if args.dry_run:
         print("\n\n---\n\n".join(messages))
+        print("[daily-report] dry-run complete", flush=True)
         return
 
     token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
@@ -283,8 +297,12 @@ def main():
     if not token or not chat_id:
         raise RuntimeError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured")
 
-    for message in messages:
+    total = len(messages)
+    for index, message in enumerate(messages, 1):
         send(token, chat_id, message)
+        print(f"[daily-report] telegram sent {index}/{total}", flush=True)
+
+    print("[daily-report] complete", flush=True)
 
 
 if __name__ == "__main__":
