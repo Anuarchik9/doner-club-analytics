@@ -211,6 +211,8 @@ def install_auth(app):
         "/departments",
         "/orders-access-test",
         "/olap-",
+        "/staff-analytics",
+        "/staff-capability-check-",
     )
 
     @app.before_request
