@@ -590,18 +590,26 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
         base_url, token = core.iiko_server_auth()
         fields = _get_transaction_fields(base_url, token)
 
-        date_field = _pick(fields, (
-            "DateTime.DateTyped",
+        date_candidates = []
+        for name in (
             "DateSecondary.DateTyped",
-            "DateTime.Typed",
+            "DateTime.DateTyped",
             "DateSecondary.DateTimeTyped",
-        ))
-        if not date_field:
-            date_field = next(
-                (name for name in sorted(fields)
-                 if "date" in name.lower() and "typed" in name.lower() and _allowed(fields, name, "groupingAllowed")),
-                None,
-            )
+            "DateTime.Typed",
+        ):
+            if name in fields and _allowed(fields, name, "groupingAllowed") and name not in date_candidates:
+                date_candidates.append(name)
+        for name in sorted(fields):
+            if (
+                "date" in name.lower()
+                and "typed" in name.lower()
+                and _allowed(fields, name, "groupingAllowed")
+                and name not in date_candidates
+            ):
+                date_candidates.append(name)
+        if not date_candidates:
+            raise RuntimeError("No usable transaction date field found")
+
         supplier_name_field = _supplier_name_field(fields)
         supplier_type_field = _supplier_type_field(fields)
         supplier_id_field = _supplier_id_field(fields)
@@ -609,7 +617,7 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
         product_field = _pick(fields, ("Product.Name", "Contr-Product.Name"))
         unit_field = _pick(fields, ("Product.MeasureUnit", "Contr-Product.MeasureUnit"))
 
-        if not date_field or not supplier_name_field or not product_field:
+        if not supplier_name_field or not product_field:
             raise RuntimeError("iikoServer does not expose enough supplier purchase fields")
 
         aggregate_fields = [
@@ -619,13 +627,6 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
         if not aggregate_fields:
             raise RuntimeError("No incoming amount/cost aggregates found in TRANSACTIONS")
 
-        group_fields = []
-        for name in [date_field, document_field, supplier_name_field, supplier_type_field, supplier_id_field, product_field, unit_field]:
-            if name and name not in group_fields and _allowed(fields, name, "groupingAllowed"):
-                group_fields.append(name)
-
-        supplier_filter = None
-        server_filtered = False
         filter_field = None
         filter_value = None
         if supplier_id and supplier_id_field and _allowed(fields, supplier_id_field, "filteringAllowed"):
@@ -634,6 +635,8 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
         elif supplier_name and _allowed(fields, supplier_name_field, "filteringAllowed"):
             filter_field = supplier_name_field
             filter_value = supplier_name
+
+        supplier_filter = None
         if filter_field:
             supplier_filter = {
                 filter_field: {
@@ -641,93 +644,160 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                     "values": [filter_value],
                 }
             }
-            server_filtered = True
 
-        try:
-            rows = _query_rows_chunked(
-                base_url,
-                token,
-                group_fields,
-                aggregate_fields,
+        requested_start = datetime.strptime(date_from, "%Y-%m-%d").date()
+
+        def query_for_date_field(date_field):
+            group_fields = []
+            for name in [
                 date_field,
-                date_from,
-                date_to,
-                extra_filters=supplier_filter,
-                chunk_days=60,
-                timeout=45,
-            )
-        except (RuntimeError, requests.Timeout, requests.ConnectionError):
-            # Some iiko builds expose the field as filterable but become unstable
-            # on IncludeValues for long periods. Fall back to small date chunks
-            # and filter the already-grouped rows in Python.
-            server_filtered = False
-            rows = _query_rows_chunked(
-                base_url,
-                token,
-                group_fields,
-                aggregate_fields,
+                document_field,
+                supplier_name_field,
+                supplier_type_field,
+                supplier_id_field,
+                product_field,
+                unit_field,
+            ]:
+                if name and name not in group_fields and _allowed(fields, name, "groupingAllowed"):
+                    group_fields.append(name)
+
+            server_filtered = bool(supplier_filter)
+            try:
+                rows = _query_rows_chunked(
+                    base_url,
+                    token,
+                    group_fields,
+                    aggregate_fields,
+                    date_field,
+                    date_from,
+                    date_to,
+                    extra_filters=supplier_filter,
+                    chunk_days=90,
+                    timeout=45,
+                )
+            except (RuntimeError, requests.Timeout, requests.ConnectionError):
+                server_filtered = False
+                rows = _query_rows_chunked(
+                    base_url,
+                    token,
+                    group_fields,
+                    aggregate_fields,
+                    date_field,
+                    date_from,
+                    date_to,
+                    extra_filters=None,
+                    chunk_days=45,
+                    timeout=45,
+                )
+
+            if supplier_id and supplier_id_field:
+                rows = [
+                    row for row in rows
+                    if _norm(row.get(supplier_id_field)) == supplier_id
+                ]
+            elif supplier_name:
+                rows = [
+                    row for row in rows
+                    if _norm(row.get(supplier_name_field)).casefold() == supplier_name.casefold()
+                ]
+
+            suppliers = _supplier_rollup(
+                rows,
                 date_field,
-                date_from,
-                date_to,
-                extra_filters=None,
-                chunk_days=30,
-                timeout=45,
+                document_field,
+                product_field,
+                unit_field,
+                supplier_name_field,
+                supplier_type_field,
+                supplier_id_field,
             )
+            supplier = next(
+                (
+                    item for item in suppliers
+                    if (supplier_id and item.get("id") == supplier_id)
+                    or (not supplier_id and item["name"].casefold() == supplier_name.casefold())
+                ),
+                None,
+            )
+            if not supplier:
+                return {
+                    "dateField": date_field,
+                    "supplier": None,
+                    "serverFiltered": server_filtered,
+                    "points": 0,
+                    "oldest": "",
+                    "newest": "",
+                    "deliveries": 0,
+                }
 
-        if supplier_id and supplier_id_field:
-            rows = [
-                row for row in rows
-                if _norm(row.get(supplier_id_field)) == supplier_id
-            ]
-        elif supplier_name:
-            rows = [
-                row for row in rows
-                if _norm(row.get(supplier_name_field)).casefold() == supplier_name.casefold()
-            ]
-
-        suppliers = _supplier_rollup(
-            rows,
-            date_field,
-            document_field,
-            product_field,
-            unit_field,
-            supplier_name_field,
-            supplier_type_field,
-            supplier_id_field,
-        )
-        supplier = next(
-            (
-                item for item in suppliers
-                if (supplier_id and item.get("id") == supplier_id)
-                or (not supplier_id and item["name"].casefold() == supplier_name.casefold())
-            ),
-            None,
-        )
-
-        oldest = ""
-        newest = ""
-        history_points = 0
-        if supplier:
             all_dates = [
                 point.get("date")
                 for product in supplier.get("products") or []
                 for point in product.get("history") or []
                 if point.get("date")
             ]
-            history_points = len(all_dates)
-            if all_dates:
-                oldest = min(all_dates)
-                newest = max(all_dates)
+            return {
+                "dateField": date_field,
+                "supplier": supplier,
+                "serverFiltered": server_filtered,
+                "points": len(all_dates),
+                "oldest": min(all_dates) if all_dates else "",
+                "newest": max(all_dates) if all_dates else "",
+                "deliveries": int(supplier.get("deliveries") or 0),
+            }
 
+        attempts = []
+        best = None
+        for index, date_field in enumerate(date_candidates[:2]):
+            try:
+                result = query_for_date_field(date_field)
+                attempts.append({
+                    "dateField": date_field,
+                    "points": result["points"],
+                    "deliveries": result["deliveries"],
+                    "oldest": result["oldest"],
+                    "newest": result["newest"],
+                })
+                if (
+                    best is None
+                    or result["deliveries"] > best["deliveries"]
+                    or (
+                        result["deliveries"] == best["deliveries"]
+                        and result["points"] > best["points"]
+                    )
+                    or (
+                        result["deliveries"] == best["deliveries"]
+                        and result["points"] == best["points"]
+                        and result["oldest"]
+                        and (not best["oldest"] or result["oldest"] < best["oldest"])
+                    )
+                ):
+                    best = result
+
+                # If this date dimension already reaches close to the requested
+                # start, a second OLAP pass cannot add meaningful history.
+                if result["oldest"]:
+                    oldest_date = datetime.strptime(result["oldest"], "%Y-%m-%d").date()
+                    if oldest_date <= requested_start + timedelta(days=14):
+                        break
+            except (RuntimeError, requests.Timeout, requests.ConnectionError):
+                continue
+
+        if best is None:
+            raise RuntimeError("iikoServer did not return supplier history for the selected period")
+
+        supplier = best["supplier"]
         return {
             "success": True,
             "period": {"from": date_from, "to": date_to, "days": days},
             "supplier": supplier,
-            "serverFiltered": server_filtered,
+            "serverFiltered": best["serverFiltered"],
             "historyMeta": {
-                "oldestDate": oldest,
-                "newestDate": newest,
-                "points": history_points,
+                "oldestDate": best["oldest"],
+                "newestDate": best["newest"],
+                "points": best["points"],
+                "dateField": best["dateField"],
+                "attempts": attempts,
             },
         }
     finally:
