@@ -22,6 +22,7 @@
   document.head.appendChild(style);
 
   const isRevision = location.pathname.endsWith('/revisions.html');
+  const isProcurement = location.pathname.endsWith('/procurement.html');
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'dc-nav-toggle';
@@ -38,10 +39,11 @@
   drawer.innerHTML = `
     <div class="dc-nav-brand"><b>DONER CLUB ANALYTICS</b><span>Управленческая система</span></div>
     <nav class="dc-nav-links">
-      <a class="dc-nav-link ${isRevision?'':'active'}" href="/static/dashboard-v2.html"><span class="dc-nav-icon">↗</span><span>Продажи и аналитика</span></a>
+      <a class="dc-nav-link ${!isRevision&&!isProcurement?'active':''}" href="/static/dashboard-v2.html"><span class="dc-nav-icon">↗</span><span>Продажи и аналитика</span></a>
       <a class="dc-nav-link ${isRevision?'active':''}" href="/static/revisions.html"><span class="dc-nav-icon">≋</span><span>Ревизии</span></a>
+      <a class="dc-nav-link ${isProcurement?'active':''}" href="/static/procurement.html"><span class="dc-nav-icon">₸</span><span>Закупки</span></a>
     </nav>
-    <div class="dc-nav-foot">Новые управленческие разделы будем добавлять сюда отдельно, не перегружая основной дашборд.</div>`;
+    <div class="dc-nav-foot">Продажи, ревизии и закупки разделены, чтобы каждый блок оставался понятным и быстрым.</div>`;
 
   function setOpen(open){
     button.classList.toggle('open',open);
