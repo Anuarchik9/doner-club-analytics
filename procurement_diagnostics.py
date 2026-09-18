@@ -445,12 +445,16 @@ def _invoice_supplier_match(value, supplier_name, supplier_id):
     if not isinstance(value, dict):
         return True
     sid, sname = _json_supplier_info(value)
-    if sid and supplier_id and sid == supplier_id:
-        return True
-    if sname and _supplier_alias_match(sname, supplier_name):
-        return True
-    # If the list row does not expose a supplier, detail fetch is required.
-    return not sid and not sname
+    if sid:
+        if supplier_id:
+            return sid == supplier_id
+        # A supplier ID exists but caller only has a name; detail fetch is needed
+        # because the list row cannot prove the name.
+        return not sname
+    if sname:
+        return _supplier_alias_match(sname, supplier_name)
+    # If the list row exposes neither supplier ID nor name, detail fetch is required.
+    return True
 
 
 def _cloud_invoice_to_rows(document_summary, detail, supplier_name, supplier_id, products_map):
@@ -462,11 +466,23 @@ def _cloud_invoice_to_rows(document_summary, detail, supplier_name, supplier_id,
     if not actual_id and not actual_name:
         actual_id, actual_name = _json_supplier_info(document_summary)
 
-    if actual_id and supplier_id and actual_id != supplier_id:
-        if not actual_name or not _supplier_alias_match(actual_name, supplier_name):
+    if supplier_id:
+        if actual_id:
+            if actual_id != supplier_id:
+                return []
+        elif actual_name:
+            if not _supplier_alias_match(actual_name, supplier_name):
+                return []
+        else:
+            # Never attribute an invoice to the selected supplier when the detail
+            # response contains no supplier identity at all.
             return []
-    elif actual_name and not _supplier_alias_match(actual_name, supplier_name):
-        return []
+    elif supplier_name:
+        if actual_name:
+            if not _supplier_alias_match(actual_name, supplier_name):
+                return []
+        elif not actual_id:
+            return []
 
     date_value = _normalize_invoice_date(
         document_summary.get("date")
@@ -748,9 +764,13 @@ def _json_unit_name(item):
 
 def _json_supplier_info(document, fallback_name="", fallback_id=""):
     supplier = _ci_get(document, "supplier", "counteragent", "contractor", "provider")
+    scalar_supplier_id = ""
+    if supplier not in (None, "") and not isinstance(supplier, (dict, list)):
+        scalar_supplier_id = _norm(supplier)
     supplier_id = _norm(
         _ci_get(document, "supplierId", "counteragentId", "contractorId", "providerId")
         or (_ci_get(supplier, "id", "supplierId") if isinstance(supplier, dict) else "")
+        or scalar_supplier_id
         or fallback_id
     )
     supplier_name = _norm(
@@ -1495,8 +1515,8 @@ def build_procurement_diagnostics(days=180):
             date_field,
             date_from,
             date_to,
-            chunk_days=60 if days > 90 else 90,
-            timeout=55,
+            chunk_days=180 if days >= 180 else 120,
+            timeout=60,
         )
 
         supplier_rollup = _supplier_rollup(
