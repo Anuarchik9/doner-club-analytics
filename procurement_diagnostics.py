@@ -1,3 +1,4 @@
+import os
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -346,6 +347,387 @@ def _contractor_catalog(base_url, token):
     for item in contractors:
         unique[item["id"]] = item
     return list(unique.values())
+
+
+
+IIKOWEB_BASE_URL = "https://public-api.iikoweb.ru"
+
+
+def _iikoweb_token():
+    api_key = (os.environ.get("IIKO_API_KEY") or "").strip()
+    app_id = (os.environ.get("IIKO_APP_ID") or "").strip()
+    client_secret = (os.environ.get("IIKO_CLIENT_SECRET") or "").strip()
+    if not api_key:
+        raise RuntimeError("IIKO_API_KEY is not configured")
+    payload = {"api_key": api_key}
+    if app_id:
+        payload["app_id"] = app_id
+    if client_secret:
+        payload["client_secret"] = client_secret
+    response = requests.post(
+        f"{IIKOWEB_BASE_URL}/auth",
+        json=payload,
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    token = _norm(data.get("token"))
+    if not token:
+        raise RuntimeError("iiko Public Web API returned an empty token")
+    return token
+
+
+def _iikoweb_post(token, path, payload, timeout=70):
+    response = requests.post(
+        f"{IIKOWEB_BASE_URL}/{path.lstrip('/')}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _ci_get(mapping, *names):
+    if not isinstance(mapping, dict):
+        return None
+    wanted = {str(name).casefold() for name in names}
+    for key, value in mapping.items():
+        if str(key).casefold() in wanted:
+            return value
+    return None
+
+
+def _iter_dicts(value):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            if isinstance(child, (dict, list)):
+                yield from _iter_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            if isinstance(child, (dict, list)):
+                yield from _iter_dicts(child)
+
+
+def _nested_text(value, *names):
+    if isinstance(value, dict):
+        direct = _ci_get(value, *names)
+        if direct not in (None, "") and not isinstance(direct, (dict, list)):
+            return _norm(direct)
+        for child in value.values():
+            if isinstance(child, dict):
+                nested = _nested_text(child, *names)
+                if nested:
+                    return nested
+    return ""
+
+
+def _json_product_info(item, products_map):
+    product = _ci_get(item, "product", "item", "nomenclature")
+    product_id = _norm(
+        _ci_get(item, "productId", "itemId", "nomenclatureId")
+        or (_ci_get(product, "id", "productId") if isinstance(product, dict) else "")
+    )
+    product_name = _norm(
+        _ci_get(item, "productName", "itemName", "nomenclatureName")
+        or (_ci_get(product, "name", "productName") if isinstance(product, dict) else "")
+    )
+    if not product_name and product_id:
+        product_name = _norm((products_map.get(product_id) or {}).get("name"))
+    return product_id, product_name
+
+
+def _json_unit_name(item):
+    unit = _ci_get(item, "measureUnit", "unit", "mainUnit", "unitName")
+    if isinstance(unit, dict):
+        return _norm(_ci_get(unit, "name", "shortName", "code"))
+    if unit not in (None, ""):
+        return _norm(unit)
+    return ""
+
+
+def _json_supplier_info(document, fallback_name="", fallback_id=""):
+    supplier = _ci_get(document, "supplier", "counteragent", "contractor", "provider")
+    supplier_id = _norm(
+        _ci_get(document, "supplierId", "counteragentId", "contractorId", "providerId")
+        or (_ci_get(supplier, "id", "supplierId") if isinstance(supplier, dict) else "")
+        or fallback_id
+    )
+    supplier_name = _norm(
+        _ci_get(document, "supplierName", "counteragentName", "contractorName", "providerName")
+        or (_ci_get(supplier, "name", "fullName", "shortName") if isinstance(supplier, dict) else "")
+        or fallback_name
+    )
+    return supplier_id, supplier_name
+
+
+def _document_item_list(document):
+    if not isinstance(document, dict):
+        return []
+    preferred = (
+        "items", "lines", "rows", "documentItems", "invoiceItems",
+        "positions", "products", "records",
+    )
+    for name in preferred:
+        value = _ci_get(document, name)
+        if isinstance(value, list) and any(isinstance(x, dict) for x in value):
+            return [x for x in value if isinstance(x, dict)]
+    for value in document.values():
+        if isinstance(value, list) and value and all(isinstance(x, dict) for x in value):
+            if any(
+                _ci_get(x, "productId", "product", "productName", "itemId", "amount", "quantity") is not None
+                for x in value[:5]
+            ):
+                return value
+    return []
+
+
+def _parse_iikoweb_invoice_payload(payload, fallback_supplier_name="", fallback_supplier_id=""):
+    try:
+        products_map = core.get_products_map()
+    except Exception:
+        products_map = {}
+
+    rows = []
+    documents_seen = 0
+    used_nodes = set()
+
+    for document in _iter_dicts(payload):
+        items = _document_item_list(document)
+        if not items:
+            continue
+        marker = id(document)
+        if marker in used_nodes:
+            continue
+        used_nodes.add(marker)
+
+        parsed_items = []
+        for item in items:
+            product_id, product_name = _json_product_info(item, products_map)
+            quantity = abs(_num(_ci_get(item, "amount", "quantity", "qty", "count", "actualAmount", "productAmount")))
+            unit_price = abs(_num(_ci_get(item, "price", "unitPrice", "priceWithoutVat", "costPrice", "purchasePrice")))
+            line_sum = abs(_num(_ci_get(item, "sum", "total", "productSum", "totalSum", "cost", "amountSum")))
+            if unit_price <= 0 and quantity > 0 and line_sum > 0:
+                unit_price = line_sum / quantity
+            if line_sum <= 0 and quantity > 0 and unit_price > 0:
+                line_sum = quantity * unit_price
+            if not product_name or quantity <= 0 or unit_price <= 0:
+                continue
+            parsed_items.append({
+                "productId": product_id,
+                "product": product_name,
+                "unit": _json_unit_name(item),
+                "quantity": quantity,
+                "sum": line_sum,
+                "unitPrice": unit_price,
+            })
+        if not parsed_items:
+            continue
+
+        documents_seen += 1
+        supplier_id, supplier_name = _json_supplier_info(
+            document,
+            fallback_supplier_name,
+            fallback_supplier_id,
+        )
+        date_value = _normalize_invoice_date(
+            _ci_get(
+                document,
+                "dateIncoming", "documentDate", "invoiceDate", "deliveryDate",
+                "date", "dateTime", "createdAt", "creationDate",
+            )
+        )
+        document_number = _norm(
+            _ci_get(document, "documentNumber", "number", "invoiceNumber", "num", "documentNo")
+        )
+        document_id = _norm(_ci_get(document, "id", "documentId", "invoiceId"))
+
+        for item in parsed_items:
+            rows.append({
+                "date": date_value,
+                "document": document_number or document_id,
+                "supplierId": supplier_id,
+                "supplier": supplier_name,
+                **item,
+            })
+
+    # Some API builds return a flat list of line records rather than document objects.
+    if not rows:
+        for item in _iter_dicts(payload):
+            product_id, product_name = _json_product_info(item, products_map)
+            quantity = abs(_num(_ci_get(item, "amount", "quantity", "qty", "count", "actualAmount", "productAmount")))
+            unit_price = abs(_num(_ci_get(item, "price", "unitPrice", "priceWithoutVat", "costPrice", "purchasePrice")))
+            line_sum = abs(_num(_ci_get(item, "sum", "total", "productSum", "totalSum", "cost", "amountSum")))
+            if unit_price <= 0 and quantity > 0 and line_sum > 0:
+                unit_price = line_sum / quantity
+            if line_sum <= 0 and quantity > 0 and unit_price > 0:
+                line_sum = quantity * unit_price
+            if not product_name or quantity <= 0 or unit_price <= 0:
+                continue
+            supplier_id, supplier_name = _json_supplier_info(item, fallback_supplier_name, fallback_supplier_id)
+            rows.append({
+                "date": _normalize_invoice_date(
+                    _ci_get(item, "dateIncoming", "documentDate", "invoiceDate", "deliveryDate", "date", "dateTime")
+                ),
+                "document": _norm(_ci_get(item, "documentNumber", "number", "invoiceNumber", "documentId", "id")),
+                "supplierId": supplier_id,
+                "supplier": supplier_name,
+                "productId": product_id,
+                "product": product_name,
+                "unit": _json_unit_name(item),
+                "quantity": quantity,
+                "sum": line_sum,
+                "unitPrice": unit_price,
+            })
+
+    return rows, {
+        "documents": documents_seen,
+        "rows": len(rows),
+        "responseType": type(payload).__name__,
+    }
+
+
+def _iikoweb_counteragents(token, department_id):
+    payload = {
+        "departmentId": department_id,
+        "type": ["supplier"],
+        "limit": 2000,
+        "offset": 0,
+    }
+    data = _iikoweb_post(token, "document-processing/counteragents", payload, timeout=45)
+    result = []
+    for record in _iter_dicts(data):
+        cid = _norm(_ci_get(record, "id", "supplierId", "counteragentId", "contractorId"))
+        name = _norm(_ci_get(record, "name", "fullName", "shortName", "supplierName"))
+        if cid and name:
+            result.append({"id": cid, "name": name})
+    unique = {}
+    for item in result:
+        unique[item["id"]] = item
+    return list(unique.values())
+
+
+def _iikoweb_supplier_history_rows(supplier_name, supplier_id, date_from, date_to):
+    token = _iikoweb_token()
+    departments = core.get_departments()
+    if not departments:
+        raise RuntimeError("iiko did not return departments for invoice export")
+
+    aliases_by_department = {}
+    alias_meta = []
+    counteragent_errors = []
+
+    for department in departments:
+        department_id = _norm(department.get("organizationId"))
+        if not department_id:
+            continue
+        candidates = {}
+        if supplier_id:
+            candidates[supplier_id] = {"id": supplier_id, "name": supplier_name}
+        try:
+            for item in _iikoweb_counteragents(token, department_id):
+                if _supplier_alias_match(item.get("name"), supplier_name):
+                    candidates[item["id"]] = item
+        except Exception as error:
+            counteragent_errors.append({
+                "departmentId": department_id,
+                "department": department.get("name") or department.get("code"),
+                "error": str(error)[:300],
+            })
+        aliases_by_department[department_id] = list(candidates.values())
+        for item in candidates.values():
+            alias_meta.append({
+                "departmentId": department_id,
+                "department": department.get("name") or department.get("code"),
+                "id": item.get("id"),
+                "name": item.get("name"),
+            })
+
+    all_rows = []
+    export_meta = []
+    errors = []
+    seen = set()
+
+    for department in departments:
+        department_id = _norm(department.get("organizationId"))
+        if not department_id:
+            continue
+        aliases = aliases_by_department.get(department_id) or []
+        if not aliases and supplier_id:
+            aliases = [{"id": supplier_id, "name": supplier_name}]
+        for alias in aliases:
+            alias_id = _norm(alias.get("id"))
+            if not alias_id:
+                continue
+            for chunk_from, chunk_to in _date_chunks(date_from, date_to, 90):
+                body = {
+                    "departmentId": department_id,
+                    "dateFrom": chunk_from,
+                    "dateTo": chunk_to,
+                    "supplierId": alias_id,
+                }
+                try:
+                    payload = _iikoweb_post(
+                        token,
+                        "document-processing/incoming-invoice/export",
+                        body,
+                        timeout=75,
+                    )
+                    rows, meta = _parse_iikoweb_invoice_payload(
+                        payload,
+                        fallback_supplier_name=supplier_name or alias.get("name") or "",
+                        fallback_supplier_id=supplier_id or alias_id,
+                    )
+                    export_meta.append({
+                        "departmentId": department_id,
+                        "department": department.get("name") or department.get("code"),
+                        "supplierId": alias_id,
+                        "supplierName": alias.get("name"),
+                        "from": chunk_from,
+                        "to": chunk_to,
+                        **meta,
+                    })
+                    for row in rows:
+                        row_name = _norm(row.get("supplier"))
+                        row_id = _norm(row.get("supplierId"))
+                        if row_name and not _supplier_alias_match(row_name, supplier_name):
+                            if supplier_id and row_id != supplier_id and row_id != alias_id:
+                                continue
+                        row["supplier"] = supplier_name or row_name or alias.get("name") or ""
+                        row["supplierId"] = supplier_id or row_id or alias_id
+                        key = (
+                            row.get("date"),
+                            row.get("document"),
+                            row.get("productId") or row.get("product"),
+                            round(_num(row.get("quantity")), 6),
+                            round(_num(row.get("sum")), 2),
+                            round(_num(row.get("unitPrice")), 4),
+                        )
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        all_rows.append(row)
+                except Exception as error:
+                    errors.append({
+                        "departmentId": department_id,
+                        "department": department.get("name") or department.get("code"),
+                        "supplierId": alias_id,
+                        "from": chunk_from,
+                        "to": chunk_to,
+                        "error": str(error)[:500],
+                    })
+
+    return all_rows, {
+        "aliases": alias_meta,
+        "exports": export_meta,
+        "errors": errors[:20],
+        "counteragentErrors": counteragent_errors[:20],
+        "departmentsChecked": len([d for d in departments if d.get("organizationId")]),
+    }
 
 
 def _incoming_invoice_xml(base_url, token, date_from, date_to, supplier_id=None):
