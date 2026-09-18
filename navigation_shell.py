@@ -16,7 +16,7 @@ def install_navigation_shell(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/navigation-shell.js?v=20260916-1"></script>'
+                tag = '<script src="/static/navigation-shell.js?v=20260919-staff"></script>'
                 if tag not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
