@@ -355,6 +355,9 @@ def _contractor_catalog(base_url, token):
 _SUPPLIER_HISTORY_CACHE = {}
 _SUPPLIER_HISTORY_TTL = 10 * 60
 
+_HISTORY_COVERAGE_CACHE = {}
+_HISTORY_COVERAGE_TTL = 20 * 60
+
 
 def _history_cache_get(key):
     item = _SUPPLIER_HISTORY_CACHE.get(key)
@@ -542,7 +545,7 @@ def _cloud_invoice_to_rows(document_summary, detail, supplier_name, supplier_id,
     return rows
 
 
-def _cloud_counteragents_for_org(organization_id, supplier_name):
+def _cloud_counteragent_catalog_for_org(organization_id):
     result = []
     offset = 0
     while offset < 20000:
@@ -564,19 +567,14 @@ def _cloud_counteragents_for_org(organization_id, supplier_name):
         for item in chunk:
             if not isinstance(item, dict):
                 continue
-            # Historical incoming invoices can still point to an archived/deleted
-            # counteragent card. For history we must keep every card whose name
-            # matches the selected supplier, even if the current card is disabled
-            # or no longer marked as a supplier.
             cid = _norm(item.get("id"))
             name = _norm(item.get("name"))
-            if cid and name and _supplier_alias_match(name, supplier_name):
+            if cid and name:
                 result.append({
                     "id": cid,
                     "name": name,
                     "supplier": bool(item.get("supplier", False)),
                     "deleted": bool(item.get("deleted", False)),
-                    "active": not bool(item.get("deleted", False)),
                 })
         if len(chunk) < 500:
             break
@@ -585,6 +583,17 @@ def _cloud_counteragents_for_org(organization_id, supplier_name):
     for item in result:
         unique[item["id"]] = item
     return list(unique.values())
+
+
+def _cloud_counteragents_for_org(organization_id, supplier_name):
+    return [
+        {
+            **item,
+            "active": not bool(item.get("deleted", False)),
+        }
+        for item in _cloud_counteragent_catalog_for_org(organization_id)
+        if _supplier_alias_match(item.get("name"), supplier_name)
+    ]
 
 
 def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date_to):
@@ -868,6 +877,195 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
         "detailDocuments": len(summaries),
         "rows": len(unique_rows),
     }
+
+
+def build_supplier_history_coverage(days=730):
+    days = max(30, min(int(days or 730), 730))
+    today = datetime.now(core.LOCAL_TZ).date()
+    date_from = (today - timedelta(days=days)).isoformat()
+    date_to = today.isoformat()
+    cache_key = (days, date_to)
+    cached = _HISTORY_COVERAGE_CACHE.get(cache_key)
+    if cached and cached.get("expires_at", 0) > time.time():
+        return cached["value"]
+
+    organizations = _cloud_allowed_organizations()
+    if not organizations:
+        raise RuntimeError("iiko did not return organizations available to this API login")
+
+    suppliers = {}
+    org_meta = []
+    errors = []
+
+    for org in organizations:
+        oid = org["organizationId"]
+        try:
+            catalog = _cloud_counteragent_catalog_for_org(oid)
+        except Exception as error:
+            catalog = []
+            errors.append({
+                "organizationId": oid,
+                "organization": org.get("name"),
+                "stage": "counteragents",
+                "error": str(error)[:400],
+            })
+
+        by_id = {item["id"]: item for item in catalog if item.get("id")}
+        listed = 0
+        matched = 0
+
+        for chunk_from, chunk_to in _date_chunks(date_from, date_to, 180):
+            try:
+                data = _cloud_post(
+                    "/api/inventory/v1/incoming_invoice/list",
+                    {"organizationId": oid, "from": chunk_from, "to": chunk_to},
+                    timeout=55,
+                    retries=2,
+                )
+                docs = _invoice_list(data)
+                listed += len(docs)
+                for doc in docs:
+                    if doc.get("deleted"):
+                        continue
+                    sid, sname = _json_supplier_info(doc)
+                    catalog_item = by_id.get(sid) if sid else None
+                    name = _norm((catalog_item or {}).get("name") or sname)
+                    if not name:
+                        continue
+                    # Keep both active and archived supplier cards because old
+                    # invoices can point to either.
+                    date_value = _normalize_invoice_date(
+                        _ci_get(
+                            doc,
+                            "dateIncoming", "documentDate", "invoiceDate",
+                            "deliveryDate", "date", "dateTime", "createdAt",
+                        )
+                    )
+                    if not date_value:
+                        continue
+                    key = _supplier_name_key(name)
+                    if not key:
+                        continue
+                    stat = suppliers.setdefault(key, {
+                        "name": name,
+                        "supplierIds": set(),
+                        "organizations": set(),
+                        "earliestDate": date_value,
+                        "latestDate": date_value,
+                        "documents": 0,
+                        "sample": None,
+                        "archivedCardSeen": False,
+                    })
+                    if sid:
+                        stat["supplierIds"].add(sid)
+                    stat["organizations"].add(oid)
+                    stat["earliestDate"] = min(stat["earliestDate"], date_value)
+                    stat["latestDate"] = max(stat["latestDate"], date_value)
+                    stat["documents"] += 1
+                    if catalog_item and catalog_item.get("deleted"):
+                        stat["archivedCardSeen"] = True
+                    if not stat["sample"] or date_value > stat["sample"].get("date", ""):
+                        stat["sample"] = {
+                            "organizationId": oid,
+                            "documentId": _norm(doc.get("documentId") or doc.get("id")),
+                            "supplierId": sid,
+                            "date": date_value,
+                        }
+                    matched += 1
+            except Exception as error:
+                errors.append({
+                    "organizationId": oid,
+                    "organization": org.get("name"),
+                    "stage": "invoice-list",
+                    "from": chunk_from,
+                    "to": chunk_to,
+                    "error": str(error)[:400],
+                })
+
+        org_meta.append({
+            "organizationId": oid,
+            "organization": org.get("name"),
+            "listedDocuments": listed,
+            "mappedDocuments": matched,
+            "counteragents": len(catalog),
+        })
+
+    def verify_supplier(item):
+        sample = item.get("sample") or {}
+        oid = sample.get("organizationId")
+        doc_id = sample.get("documentId")
+        if not oid or not doc_id:
+            return False, "sample document is missing"
+        try:
+            detail = _cloud_post(
+                "/api/inventory/v1/incoming_invoice/get",
+                {"organizationId": oid, "documentId": doc_id},
+                timeout=45,
+                retries=1,
+            )
+            inv = detail.get("incomingInvoice", detail) if isinstance(detail, dict) else {}
+            items = inv.get("items") if isinstance(inv, dict) else None
+            if not isinstance(items, list) or not any(isinstance(x, dict) for x in items):
+                return False, "invoice detail has no item rows"
+            return True, ""
+        except Exception as error:
+            return False, str(error)[:300]
+
+    verification = {}
+    rows_for_verify = list(suppliers.items())
+    workers = min(5, max(1, len(rows_for_verify)))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="history-coverage") as executor:
+        future_map = {
+            executor.submit(verify_supplier, stat): key
+            for key, stat in rows_for_verify
+        }
+        for future in as_completed(future_map):
+            key = future_map[future]
+            try:
+                verification[key] = future.result()
+            except Exception as error:
+                verification[key] = (False, str(error)[:300])
+
+    presets = (30, 90, 180, 365, 730)
+    result_suppliers = []
+    for key, stat in suppliers.items():
+        try:
+            earliest_date = datetime.strptime(stat["earliestDate"], "%Y-%m-%d").date()
+            available_days = max(1, (today - earliest_date).days + 1)
+        except Exception:
+            available_days = 0
+        verified, verify_error = verification.get(key, (False, "not checked"))
+        result_suppliers.append({
+            "name": stat["name"],
+            "supplierIds": sorted(stat["supplierIds"]),
+            "organizations": sorted(stat["organizations"]),
+            "earliestDate": stat["earliestDate"],
+            "latestDate": stat["latestDate"],
+            "availableDays": available_days,
+            "documents": stat["documents"],
+            "detailVerified": bool(verified),
+            "verifyError": verify_error,
+            "archivedCardSeen": bool(stat["archivedCardSeen"]),
+            "coverage": {
+                str(preset): bool(available_days >= preset)
+                for preset in presets
+            },
+        })
+
+    result_suppliers.sort(key=lambda item: item["name"].casefold())
+    result = {
+        "success": True,
+        "period": {"from": date_from, "to": date_to, "days": days},
+        "suppliers": result_suppliers,
+        "supplierCount": len(result_suppliers),
+        "organizations": org_meta,
+        "errors": errors[:30],
+    }
+    _HISTORY_COVERAGE_CACHE[cache_key] = {
+        "value": result,
+        "expires_at": time.time() + _HISTORY_COVERAGE_TTL,
+    }
+    return result
 
 
 IIKOWEB_BASE_URL = "https://public-api.iikoweb.ru"
@@ -2302,6 +2500,25 @@ def install_procurement_diagnostics(app):
     if getattr(app, "_doner_procurement_diagnostics_installed", False):
         return
     app._doner_procurement_diagnostics_installed = True
+
+    @app.route("/procurement-history-coverage", methods=["GET"], endpoint="procurement_history_coverage_api")
+    def procurement_history_coverage_api():
+        try:
+            days = int(request.args.get("days") or 730)
+            return jsonify(build_supplier_history_coverage(days))
+        except ValueError:
+            return jsonify({"success": False, "message": "days must be an integer"}), 400
+        except requests.Timeout:
+            return jsonify({
+                "success": False,
+                "message": "iiko did not answer in time while checking supplier history coverage.",
+            }), 504
+        except Exception as error:
+            return jsonify({
+                "success": False,
+                "message": "Не удалось проверить глубину истории поставщиков",
+                "details": str(error),
+            }), 502
 
     @app.route("/procurement-supplier-history", methods=["GET"], endpoint="procurement_supplier_history_api")
     def procurement_supplier_history_api():
