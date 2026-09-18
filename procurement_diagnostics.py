@@ -2082,13 +2082,11 @@ def _build_supplier_history_olap(supplier_name, days=30, supplier_id=""):
 
 
 def build_supplier_history(supplier_name, days=30, supplier_id=""):
-    """Load supplier history from the same iikoCloud inventory API used by this site.
+    """Load supplier history from iikoCloud incoming invoices.
 
-    Preferred source:
-      1) /api/inventory/v1/incoming_invoice/list + /get
-      2) iiko Public Web incoming-invoice export
-      3) legacy iikoServer incoming-invoice export
-      4) TRANSACTIONS OLAP only as a compatibility fallback
+    TRANSACTIONS OLAP is used only as a fast fallback. The older Public Web and
+    legacy iikoServer invoice endpoints are intentionally not called here
+    because this deployment's credentials/endpoints do not support them.
     """
     supplier_name = _norm(supplier_name)
     supplier_id = _norm(supplier_id)
@@ -2137,8 +2135,11 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
                     "newestDate": max(all_dates) if all_dates else "",
                     "points": len(all_dates),
                     "invoiceRows": len(rows),
+                    "aliases": cloud_meta.get("aliases") or [],
+                    "aliasCount": len({x.get("id") for x in (cloud_meta.get("aliases") or []) if x.get("id")}),
                     "organizations": cloud_meta.get("organizations") or [],
                     "listedDocuments": cloud_meta.get("listedDocuments"),
+                    "matchedDocuments": cloud_meta.get("matchedDocuments"),
                     "detailDocuments": cloud_meta.get("detailDocuments"),
                     "errors": (cloud_meta.get("errors") or [])[:10],
                     "detailErrors": (cloud_meta.get("detailErrors") or [])[:10],
@@ -2146,186 +2147,16 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
             }
             _history_cache_set(cache_key, result)
             return result
+
         cloud_error = (
             "iikoCloud incoming_invoice returned no usable rows"
             + (
-                f"; listed={cloud_meta.get('listedDocuments')}, details={cloud_meta.get('detailDocuments')}"
+                f"; listed={cloud_meta.get('listedDocuments')}, matched={cloud_meta.get('matchedDocuments')}, details={cloud_meta.get('detailDocuments')}"
                 if cloud_meta else ""
             )
         )
     except Exception as error:
         cloud_error = str(error)
-
-    public_web_error = ""
-    public_web_meta = {}
-    try:
-        rows, public_web_meta = _iikoweb_supplier_history_rows(
-            supplier_name,
-            supplier_id,
-            date_from,
-            date_to,
-        )
-        supplier = _supplier_from_invoice_rows(
-            rows,
-            supplier_name,
-            supplier_id,
-        )
-        if supplier:
-            all_dates = [
-                point.get("date")
-                for product in supplier.get("products") or []
-                for point in product.get("history") or []
-                if point.get("date")
-            ]
-            result = {
-                "success": True,
-                "period": {"from": date_from, "to": date_to, "days": days},
-                "supplier": supplier,
-                "serverFiltered": True,
-                "historyMeta": {
-                    "source": "iikoWebIncomingInvoice",
-                    "sourceLabel": "Приходные накладные iiko Public Web API",
-                    "oldestDate": min(all_dates) if all_dates else "",
-                    "newestDate": max(all_dates) if all_dates else "",
-                    "points": len(all_dates),
-                    "aliases": public_web_meta.get("aliases") or [],
-                    "aliasCount": len({x.get("id") for x in (public_web_meta.get("aliases") or []) if x.get("id")}),
-                    "invoiceRows": len(rows),
-                    "departmentsChecked": public_web_meta.get("departmentsChecked"),
-                    "exports": (public_web_meta.get("exports") or [])[:30],
-                    "errors": (public_web_meta.get("errors") or [])[:10],
-                    "cloudError": cloud_error,
-                },
-            }
-            _history_cache_set(cache_key, result)
-            return result
-        public_web_error = (
-            "iiko Public Web API returned no usable incoming-invoice rows"
-            + (
-                f"; exports={len(public_web_meta.get('exports') or [])}"
-                if public_web_meta else ""
-            )
-        )
-    except Exception as error:
-        public_web_error = str(error)
-
-    base_url = token = None
-    legacy_error = ""
-    legacy_meta = []
-    try:
-        base_url, token = core.iiko_server_auth()
-
-        aliases = []
-        try:
-            contractors = _contractor_catalog(base_url, token)
-            aliases = [
-                item for item in contractors
-                if (supplier_id and item.get("id") == supplier_id)
-                or _supplier_alias_match(item.get("name"), supplier_name)
-            ]
-        except Exception as error:
-            legacy_error = f"contractors: {error}"
-
-        alias_map = {}
-        for item in aliases:
-            key = item.get("id") or _supplier_name_key(item.get("name"))
-            if key:
-                alias_map[key] = item
-        if supplier_id:
-            alias_map.setdefault(
-                supplier_id,
-                {"id": supplier_id, "name": supplier_name, "type": "SUPPLIER"},
-            )
-        elif supplier_name and not alias_map:
-            aliases = []
-        aliases = list(alias_map.values())
-
-        all_rows = []
-        seen = set()
-        if aliases:
-            for alias in aliases:
-                alias_id = _norm(alias.get("id"))
-                alias_name = _norm(alias.get("name") or supplier_name)
-                if not alias_id:
-                    continue
-                for chunk_from, chunk_to in _date_chunks(date_from, date_to, 90):
-                    try:
-                        xml_bytes = _incoming_invoice_xml(
-                            base_url,
-                            token,
-                            chunk_from,
-                            chunk_to,
-                            supplier_id=alias_id,
-                        )
-                        rows, meta = _parse_incoming_invoice_rows(
-                            xml_bytes,
-                            fallback_supplier_name=supplier_name or alias_name,
-                            fallback_supplier_id=alias_id,
-                        )
-                        legacy_meta.append({
-                            "supplierId": alias_id,
-                            "supplierName": alias_name,
-                            "from": chunk_from,
-                            "to": chunk_to,
-                            **meta,
-                        })
-                        for row in rows:
-                            row["supplier"] = supplier_name or alias_name
-                            row["supplierId"] = supplier_id or alias_id
-                            key = (
-                                row.get("date"),
-                                row.get("document"),
-                                row.get("productId") or row.get("product"),
-                                round(_num(row.get("quantity")), 6),
-                                round(_num(row.get("sum")), 2),
-                                round(_num(row.get("unitPrice")), 4),
-                            )
-                            if key in seen:
-                                continue
-                            seen.add(key)
-                            all_rows.append(row)
-                    except Exception as error:
-                        legacy_error = str(error)
-
-        supplier = _supplier_from_invoice_rows(
-            all_rows,
-            supplier_name,
-            supplier_id or (aliases[0].get("id") if aliases else ""),
-        )
-        if supplier:
-            all_dates = [
-                point.get("date")
-                for product in supplier.get("products") or []
-                for point in product.get("history") or []
-                if point.get("date")
-            ]
-            result = {
-                "success": True,
-                "period": {"from": date_from, "to": date_to, "days": days},
-                "supplier": supplier,
-                "serverFiltered": True,
-                "historyMeta": {
-                    "source": "incomingInvoice",
-                    "sourceLabel": "Приходные накладные iikoServer",
-                    "oldestDate": min(all_dates) if all_dates else "",
-                    "newestDate": max(all_dates) if all_dates else "",
-                    "points": len(all_dates),
-                    "aliases": aliases,
-                    "aliasCount": len(aliases),
-                    "invoiceChunks": len(legacy_meta),
-                    "invoiceRows": len(all_rows),
-                    "invoiceMeta": legacy_meta[:20],
-                    "cloudError": cloud_error,
-                    "publicWebError": public_web_error,
-                },
-            }
-            _history_cache_set(cache_key, result)
-            return result
-    except Exception as error:
-        legacy_error = str(error)
-    finally:
-        if base_url and token:
-            core.iiko_server_logout(base_url, token)
 
     fallback = _build_supplier_history_olap(supplier_name, days, supplier_id)
     meta = fallback.setdefault("historyMeta", {})
@@ -2333,10 +2164,6 @@ def build_supplier_history(supplier_name, days=30, supplier_id=""):
     meta["sourceLabel"] = "TRANSACTIONS OLAP (резервный источник)"
     meta["cloudError"] = cloud_error
     meta["cloudMeta"] = cloud_meta
-    meta["publicWebError"] = public_web_error
-    meta["publicWebMeta"] = public_web_meta
-    meta["incomingInvoiceError"] = legacy_error
-    meta["incomingInvoiceMeta"] = legacy_meta[:10]
     _history_cache_set(cache_key, fallback)
     return fallback
 
