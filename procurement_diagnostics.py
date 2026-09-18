@@ -526,10 +526,119 @@ def diagnostics_text(result):
     return "\n".join(lines)
 
 
+
+def build_supplier_history(supplier_name, days=30):
+    supplier_name = _norm(supplier_name)
+    if not _valid_supplier_name(supplier_name):
+        raise ValueError("supplier is required")
+
+    days = max(30, min(int(days or 30), 730))
+    today = datetime.now(core.LOCAL_TZ).date()
+    date_from = (today - timedelta(days=days)).isoformat()
+    date_to = today.isoformat()
+
+    base_url = token = None
+    try:
+        base_url, token = core.iiko_server_auth()
+        fields = _get_transaction_fields(base_url, token)
+
+        date_field = _pick(fields, (
+            "DateTime.DateTyped",
+            "DateSecondary.DateTyped",
+            "DateTime.Typed",
+            "DateSecondary.DateTimeTyped",
+        ))
+        if not date_field:
+            date_field = next(
+                (name for name in sorted(fields)
+                 if "date" in name.lower() and "typed" in name.lower() and _allowed(fields, name, "groupingAllowed")),
+                None,
+            )
+        supplier_name_field = _supplier_name_field(fields)
+        supplier_type_field = _supplier_type_field(fields)
+        document_field = _pick(fields, ("Document", "Document.Number", "Document.Num"))
+        product_field = _pick(fields, ("Product.Name", "Contr-Product.Name"))
+        unit_field = _pick(fields, ("Product.MeasureUnit", "Contr-Product.MeasureUnit"))
+
+        if not date_field or not supplier_name_field or not product_field:
+            raise RuntimeError("iikoServer does not expose enough supplier purchase fields")
+
+        aggregate_fields = [
+            name for name in ("Amount.In", "Sum.Incoming", "Product.AvgSum", "Amount.StoreInOutTyped")
+            if name in fields and _allowed(fields, name, "aggregationAllowed")
+        ]
+        if not aggregate_fields:
+            raise RuntimeError("No incoming amount/cost aggregates found in TRANSACTIONS")
+
+        group_fields = []
+        for name in [date_field, document_field, supplier_name_field, supplier_type_field, product_field, unit_field]:
+            if name and name not in group_fields and _allowed(fields, name, "groupingAllowed"):
+                group_fields.append(name)
+
+        filters = _date_filter(date_field, date_from, date_to)
+        server_filtered = False
+        if _allowed(fields, supplier_name_field, "filteringAllowed"):
+            filters[supplier_name_field] = {
+                "filterType": "IncludeValues",
+                "values": [supplier_name],
+            }
+            server_filtered = True
+
+        rows = _olap(base_url, token, group_fields, aggregate_fields, filters, timeout=120)
+        if not server_filtered:
+            rows = [
+                row for row in rows
+                if _norm(row.get(supplier_name_field)).casefold() == supplier_name.casefold()
+            ]
+
+        suppliers = _supplier_rollup(
+            rows,
+            date_field,
+            document_field,
+            product_field,
+            unit_field,
+            supplier_name_field,
+            supplier_type_field,
+        )
+        supplier = next(
+            (item for item in suppliers if item["name"].casefold() == supplier_name.casefold()),
+            None,
+        )
+        return {
+            "success": True,
+            "period": {"from": date_from, "to": date_to, "days": days},
+            "supplier": supplier,
+            "serverFiltered": server_filtered,
+        }
+    finally:
+        if base_url and token:
+            core.iiko_server_logout(base_url, token)
+
+
 def install_procurement_diagnostics(app):
     if getattr(app, "_doner_procurement_diagnostics_installed", False):
         return
     app._doner_procurement_diagnostics_installed = True
+
+    @app.route("/procurement-supplier-history", methods=["GET"], endpoint="procurement_supplier_history_api")
+    def procurement_supplier_history_api():
+        try:
+            supplier = request.args.get("supplier") or ""
+            days = int(request.args.get("days") or 30)
+            return jsonify(build_supplier_history(supplier, days))
+        except ValueError as error:
+            return jsonify({"success": False, "message": str(error)}), 400
+        except requests.Timeout:
+            return jsonify({
+                "success": False,
+                "message": "iikoServer did not answer in time. Retry in a few seconds.",
+            }), 504
+        except Exception as error:
+            return jsonify({
+                "success": False,
+                "message": "Не удалось загрузить историю выбранного поставщика",
+                "details": str(error),
+            }), 502
 
     @app.route("/procurement-diagnostics", methods=["GET"], endpoint="procurement_diagnostics_api")
     def procurement_diagnostics_api():
