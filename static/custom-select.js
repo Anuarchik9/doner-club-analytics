@@ -46,7 +46,7 @@
 
     .dc-select-panel{
       position:fixed;
-      z-index:10070;
+      z-index:10250;
       display:none;
       width:min(440px,calc(100vw - 24px));
       max-height:min(430px,calc(100vh - 32px));
