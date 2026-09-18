@@ -171,7 +171,7 @@
     <div class="modal-title" id="supplierModalTitle">Поставщик</div>
     <div class="modal-meta" id="supplierModalMeta"></div>
     <div class="modal-products-copy"><b id="supplierModalProductsLabel">Что поставлял за выбранный период</b><span id="supplierModalProducts">—</span><div class="direct-note">Список строится по отдельным входящим товарным строкам iiko этого поставщика; сайт сам не преобразует «гуляш» в «филе» или «жир».</div></div>
-    <div class="supplier-period-box">
+    <div class="supplier-period-box" id="supplierPeriodBox">
       <div class="field"><label>История цен внутри этого поставщика</label><select id="supplierHistoryDays"><option value="30">30 дней</option><option value="90">90 дней</option><option value="180">180 дней</option><option value="365">365 дней</option><option value="730">730 дней</option></select></div>
       <button class="go" id="supplierHistoryLoad" type="button">Загрузить период</button>
     </div>
@@ -253,11 +253,33 @@ function renderSuppliers(){
   root.innerHTML=supplierData.map((s,i)=>'<button type="button" class="supplier-card" data-supplier="'+i+'"><div class="supplier-card-head"><h3>'+esc(s.name)+'</h3><span class="supplier-kind">'+esc(supplierKind(s.type))+'</span></div><div class="supplier-meta"><span>'+Number(s.productsCount||0)+' позиций</span><span>'+Number(s.deliveries||0)+' поставок</span><span>последняя: '+esc(s.lastDelivery||'—')+'</span></div><div class="supplier-products-label">Что поставлял за '+periodDays+' дней</div><div class="supplier-products-text">'+esc(productSummary(s.products,12))+'</div><div class="supplier-open">Открыть историю цен →</div></button>').join('');
   root.querySelectorAll('.supplier-card').forEach(card=>card.onclick=()=>openSupplier(Number(card.dataset.supplier)));
 }
+function normalizedSupplierKey(name){
+  return String(name||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,'');
+}
+function isLimitedSupplierHistory(s){
+  const key=normalizedSupplierKey(s?.name||activeSupplierName);
+  return key.includes('жуманc')||key.includes('жуманс');
+}
+function supplierHistoryBounds(s){
+  const dates=[];
+  (s?.products||[]).forEach(p=>(p.history||[]).forEach(x=>{if(x?.date)dates.push(String(x.date).slice(0,10))}));
+  dates.sort();
+  return {oldest:dates[0]||'',newest:dates[dates.length-1]||''};
+}
+function humanDate(v){
+  if(!v)return '—';
+  const p=String(v).slice(0,10).split('-');
+  return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:v;
+}
 function renderModalSupplier(s,days){
   activeSupplier=s;
   $('supplierModalTitle').textContent=s.name;
   $('supplierModalMeta').innerHTML='<span>'+esc(supplierKind(s.type))+'</span><span>·</span><span>'+Number(s.productsCount||0)+' позиций</span><span>·</span><span>'+Number(s.deliveries||0)+' поставок</span><span>·</span><span>закупки: '+money.format(Number(s.totalSpend||0))+' ₸</span>';
-  $('supplierModalProductsLabel').textContent='Что поставлял за '+days+' дней';
+  const limited=isLimitedSupplierHistory(s);
+  const bounds=supplierHistoryBounds(s);
+  $('supplierModalProductsLabel').textContent=limited
+    ?('Что найдено в доступной истории'+(bounds.oldest&&bounds.newest?' · '+humanDate(bounds.oldest)+' — '+humanDate(bounds.newest):''))
+    :('Что поставлял за '+days+' дней');
   $('supplierModalProducts').textContent=productSummary(s.products,1000);
   const select=$('supplierProductSelect');
   const currentName=select.options?.[select.selectedIndex]?.dataset?.productName||'';
@@ -275,11 +297,25 @@ function openSupplier(index){
   activeSupplierName=s.name;
   activeSupplierId=s.id||'';
   const days=Number($('days').value||30);
-  $('supplierHistoryDays').value=String(days);
-  $('supplierHistoryDays').dispatchEvent(new Event('change',{bubbles:true}));
-  renderModalSupplier(s,days);
-  $('supplierInlineLoading').className='supplier-inline-loading success';
-  $('supplierInlineLoading').textContent='Показан период '+days+' дней, загруженный вместе с основной страницей.';
+  const limited=isLimitedSupplierHistory(s);
+  const bounds=supplierHistoryBounds(s);
+
+  if(limited){
+    $('supplierPeriodBox').style.display='none';
+    renderModalSupplier(s,days);
+    $('supplierInlineLoading').className='supplier-inline-loading warning';
+    $('supplierInlineLoading').textContent='Расширенная история для '+s.name+' сейчас недоступна. В iiko удалось надежно подтвердить только найденный период'
+      +(bounds.oldest&&bounds.newest?' '+humanDate(bounds.oldest)+' — '+humanDate(bounds.newest):'')
+      +'. Выбор 90/180/365/730 дней отключен, чтобы не показывать неполные данные как полную историю.';
+  }else{
+    $('supplierPeriodBox').style.display='grid';
+    $('supplierHistoryDays').value=String(days);
+    $('supplierHistoryDays').dispatchEvent(new Event('change',{bubbles:true}));
+    renderModalSupplier(s,days);
+    $('supplierInlineLoading').className='supplier-inline-loading success';
+    $('supplierInlineLoading').textContent='Показан период '+days+' дней, загруженный вместе с основной страницей.';
+  }
+
   $('supplierModalBackdrop').classList.add('open');
   $('supplierModalBackdrop').setAttribute('aria-hidden','false');
   document.documentElement.style.overflow='hidden';
@@ -316,6 +352,13 @@ async function finishSupplierProgress(ok=true){
 }
 async function loadSupplierHistory(){
   if(!activeSupplierName)return;
+  if(isLimitedSupplierHistory(activeSupplier)){
+    const bounds=supplierHistoryBounds(activeSupplier);
+    $('supplierInlineLoading').className='supplier-inline-loading warning';
+    $('supplierInlineLoading').textContent='Расширенная история для '+activeSupplierName+' недоступна. Показаны только надежно подтвержденные данные'
+      +(bounds.oldest&&bounds.newest?' за '+humanDate(bounds.oldest)+' — '+humanDate(bounds.newest):'')+'.';
+    return;
+  }
   const days=Number($('supplierHistoryDays').value||30);
   const supplierKey=activeSupplierId||activeSupplierName;
   const key=supplierKey+'|'+days;
@@ -374,6 +417,7 @@ async function loadSupplierHistory(){
   }
 }
 function closeSupplier(){
+  $('supplierPeriodBox').style.display='grid';
   $('supplierModalBackdrop').classList.remove('open');
   $('supplierModalBackdrop').setAttribute('aria-hidden','true');
   document.documentElement.style.overflow='';
