@@ -1707,7 +1707,23 @@ def build_procurement_diagnostics(days=180):
             ),
             reverse=True,
         )
-        latest_purchases = price_evidence[:12]
+
+        recent_purchases = []
+        recent_from = ""
+        recent_to = ""
+        if price_evidence:
+            recent_to = price_evidence[0].get("date") or ""
+            try:
+                recent_to_date = datetime.strptime(recent_to, "%Y-%m-%d").date()
+                recent_from_date = recent_to_date - timedelta(days=2)
+                recent_from = recent_from_date.isoformat()
+                recent_purchases = [
+                    item for item in price_evidence
+                    if item.get("date") and item.get("date") >= recent_from
+                ]
+            except ValueError:
+                recent_purchases = price_evidence[:20]
+                recent_from = recent_to
 
         supplier_values = {supplier_name_field: supplier_names}
         if supplier_type_field:
@@ -1736,7 +1752,13 @@ def build_procurement_diagnostics(days=180):
                 "supplierValues": supplier_values,
                 "transactionValues": tx_values[:50],
                 "priceRowsFound": len(price_evidence),
-                "priceSamples": latest_purchases,
+                "priceSamples": recent_purchases,
+                "recentPurchases": recent_purchases,
+                "recentPurchasesCount": len(recent_purchases),
+                "recentPurchasesPeriod": {
+                    "from": recent_from,
+                    "to": recent_to,
+                },
                 "suppliers": supplier_rollup,
                 "suppliersCount": len(supplier_rollup),
             },
