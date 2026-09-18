@@ -542,6 +542,49 @@ def _cloud_invoice_to_rows(document_summary, detail, supplier_name, supplier_id,
     return rows
 
 
+def _cloud_counteragents_for_org(organization_id, supplier_name):
+    result = []
+    offset = 0
+    while offset < 20000:
+        data = _cloud_post(
+            "/api/inventory/v1/counteragents/list",
+            {
+                "organizationId": organization_id,
+                "limit": 500,
+                "offset": offset,
+            },
+            timeout=45,
+            retries=2,
+        )
+        chunk = []
+        if isinstance(data, dict):
+            chunk = data.get("counteragents") or data.get("entities") or data.get("items") or []
+        if not isinstance(chunk, list):
+            chunk = []
+        for item in chunk:
+            if not isinstance(item, dict):
+                continue
+            if item.get("deleted"):
+                continue
+            if item.get("supplier") is False:
+                continue
+            cid = _norm(item.get("id"))
+            name = _norm(item.get("name"))
+            if cid and name and _supplier_alias_match(name, supplier_name):
+                result.append({
+                    "id": cid,
+                    "name": name,
+                    "supplier": bool(item.get("supplier", True)),
+                })
+        if len(chunk) < 500:
+            break
+        offset += 500
+    unique = {}
+    for item in result:
+        unique[item["id"]] = item
+    return list(unique.values())
+
+
 def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date_to):
     organizations = _cloud_allowed_organizations()
     if not organizations:
@@ -552,14 +595,62 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
     except Exception:
         products_map = {}
 
+    org_aliases = {}
+    alias_meta = []
+    alias_errors = []
+    for org in organizations:
+        oid = org["organizationId"]
+        try:
+            aliases = _cloud_counteragents_for_org(oid, supplier_name)
+        except Exception as error:
+            aliases = []
+            alias_errors.append({
+                "organizationId": oid,
+                "organization": org.get("name"),
+                "error": str(error)[:350],
+            })
+        # If the OLAP-selected supplier UUID exists in this organization, keep it
+        # only when the counteragent catalog also resolves it to the selected name.
+        org_aliases[oid] = aliases
+        for item in aliases:
+            alias_meta.append({
+                "organizationId": oid,
+                "organization": org.get("name"),
+                "id": item.get("id"),
+                "name": item.get("name"),
+            })
+
+    allowed_ids = {
+        item["id"]
+        for aliases in org_aliases.values()
+        for item in aliases
+        if item.get("id")
+    }
+    if not allowed_ids:
+        raise RuntimeError(
+            f"В iikoCloud не найден поставщик «{supplier_name}» в справочнике контрагентов"
+        )
+
     summaries = []
     org_meta = []
     errors = []
 
     for org in organizations:
         oid = org["organizationId"]
-        org_count = 0
-        for chunk_from, chunk_to in _date_chunks(date_from, date_to, 90):
+        aliases = org_aliases.get(oid) or []
+        ids = {item["id"] for item in aliases if item.get("id")}
+        if not ids:
+            org_meta.append({
+                "organizationId": oid,
+                "organization": org.get("name"),
+                "listedDocuments": 0,
+                "matchedDocuments": 0,
+            })
+            continue
+
+        listed = 0
+        matched = 0
+        for chunk_from, chunk_to in _date_chunks(date_from, date_to, 180):
             try:
                 data = _cloud_post(
                     "/api/inventory/v1/incoming_invoice/list",
@@ -568,12 +659,17 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
                     retries=2,
                 )
                 docs = _invoice_list(data)
-                org_count += len(docs)
+                listed += len(docs)
                 for doc in docs:
                     if doc.get("deleted"):
                         continue
-                    if _invoice_supplier_match(doc, supplier_name, supplier_id):
-                        summaries.append((org, doc))
+                    sid, _sname = _json_supplier_info(doc)
+                    if sid:
+                        if sid not in ids:
+                            continue
+                    # If the summary omits supplier, detail fetch below will verify.
+                    summaries.append((org, doc, ids))
+                    matched += 1
             except Exception as error:
                 errors.append({
                     "organizationId": oid,
@@ -585,19 +681,23 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
         org_meta.append({
             "organizationId": oid,
             "organization": org.get("name"),
-            "listedDocuments": org_count,
+            "listedDocuments": listed,
+            "matchedDocuments": matched,
         })
 
     if not summaries:
         return [], {
             "organizations": org_meta,
+            "aliases": alias_meta,
+            "aliasErrors": alias_errors,
             "errors": errors,
             "listedDocuments": sum(x["listedDocuments"] for x in org_meta),
+            "matchedDocuments": 0,
             "detailDocuments": 0,
         }
 
-    def fetch_one(pair):
-        org, doc = pair
+    def fetch_one(triple):
+        org, doc, ids = triple
         oid = org["organizationId"]
         document_id = _norm(doc.get("documentId") or doc.get("id"))
         if not document_id:
@@ -606,16 +706,34 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
             detail = _cloud_post(
                 "/api/inventory/v1/incoming_invoice/get",
                 {"organizationId": oid, "documentId": document_id},
-                timeout=55,
+                timeout=45,
                 retries=2,
             )
+            inv = detail.get("incomingInvoice", detail) if isinstance(detail, dict) else {}
+            actual_id, actual_name = _json_supplier_info(inv if isinstance(inv, dict) else {})
+            if not actual_id:
+                actual_id, actual_name = _json_supplier_info(doc)
+            if actual_id:
+                if actual_id not in ids:
+                    return [], None
+            elif actual_name:
+                if not _supplier_alias_match(actual_name, supplier_name):
+                    return [], None
+            else:
+                return [], None
+
+            # Parse with the exact supplier identity proven above.
+            proven_id = actual_id or next(iter(ids))
             rows = _cloud_invoice_to_rows(
                 doc,
                 detail,
                 supplier_name,
-                supplier_id,
+                proven_id,
                 products_map,
             )
+            for row in rows:
+                row["supplier"] = supplier_name
+                row["supplierId"] = proven_id
             return rows, None
         except Exception as error:
             return [], {
@@ -626,10 +744,9 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
 
     all_rows = []
     detail_errors = []
-    # Keep concurrency modest: iiko inventory endpoints can throttle aggressively.
-    workers = min(3, max(1, len(summaries)))
+    workers = min(4, max(1, len(summaries)))
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="supplier-invoice") as executor:
-        futures = [executor.submit(fetch_one, pair) for pair in summaries]
+        futures = [executor.submit(fetch_one, triple) for triple in summaries]
         for future in as_completed(futures):
             rows, error = future.result()
             all_rows.extend(rows)
@@ -654,9 +771,12 @@ def _iikocloud_supplier_history_rows(supplier_name, supplier_id, date_from, date
 
     return unique_rows, {
         "organizations": org_meta,
+        "aliases": alias_meta,
+        "aliasErrors": alias_errors,
         "errors": errors[:20],
         "detailErrors": detail_errors[:20],
         "listedDocuments": sum(x["listedDocuments"] for x in org_meta),
+        "matchedDocuments": len(summaries),
         "detailDocuments": len(summaries),
         "rows": len(unique_rows),
     }
@@ -1515,7 +1635,7 @@ def build_procurement_diagnostics(days=180):
             date_field,
             date_from,
             date_to,
-            chunk_days=180 if days >= 180 else 120,
+            chunk_days=365 if days >= 365 else (180 if days >= 180 else 120),
             timeout=60,
         )
 
