@@ -1,4 +1,5 @@
 import re
+import time
 from datetime import datetime, timedelta
 
 import requests
@@ -63,7 +64,7 @@ def _date_filter(field, date_from, date_to):
     }
 
 
-def _olap(base_url, token, group_fields, aggregate_fields, filters, timeout=90):
+def _olap(base_url, token, group_fields, aggregate_fields, filters, timeout=90, retries=1):
     body = {
         "reportType": "TRANSACTIONS",
         "buildSummary": False,
@@ -72,17 +73,73 @@ def _olap(base_url, token, group_fields, aggregate_fields, filters, timeout=90):
         "aggregateFields": aggregate_fields,
         "filters": filters,
     }
-    response = requests.post(
-        f"{base_url}/api/v2/reports/olap",
-        params={"key": token},
-        json=body,
-        timeout=timeout,
-    )
-    if not response.ok:
-        raise RuntimeError(f"TRANSACTIONS OLAP HTTP {response.status_code}: {response.text[:500]}")
-    payload = response.json()
-    rows = payload.get("data", payload if isinstance(payload, list) else [])
-    return rows if isinstance(rows, list) else []
+    last_error = None
+    for attempt in range(max(1, retries + 1)):
+        try:
+            response = requests.post(
+                f"{base_url}/api/v2/reports/olap",
+                params={"key": token},
+                json=body,
+                timeout=timeout,
+            )
+            if not response.ok:
+                message = f"TRANSACTIONS OLAP HTTP {response.status_code}: {response.text[:500]}"
+                if response.status_code in {502, 503, 504} and attempt < retries:
+                    last_error = RuntimeError(message)
+                    time.sleep(0.7 * (attempt + 1))
+                    continue
+                raise RuntimeError(message)
+            payload = response.json()
+            rows = payload.get("data", payload if isinstance(payload, list) else [])
+            return rows if isinstance(rows, list) else []
+        except (requests.Timeout, requests.ConnectionError) as error:
+            last_error = error
+            if attempt >= retries:
+                raise
+            time.sleep(0.7 * (attempt + 1))
+    if last_error:
+        raise last_error
+    return []
+
+
+def _date_chunks(date_from, date_to, chunk_days=90):
+    start = datetime.strptime(date_from, "%Y-%m-%d").date()
+    finish = datetime.strptime(date_to, "%Y-%m-%d").date()
+    while start <= finish:
+        end = min(finish, start + timedelta(days=max(1, chunk_days) - 1))
+        yield start.isoformat(), end.isoformat()
+        start = end + timedelta(days=1)
+
+
+def _query_rows_chunked(
+    base_url,
+    token,
+    group_fields,
+    aggregate_fields,
+    date_field,
+    date_from,
+    date_to,
+    extra_filters=None,
+    chunk_days=90,
+    timeout=55,
+):
+    rows = []
+    for chunk_from, chunk_to in _date_chunks(date_from, date_to, chunk_days):
+        filters = _date_filter(date_field, chunk_from, chunk_to)
+        if extra_filters:
+            filters.update(extra_filters)
+        rows.extend(
+            _olap(
+                base_url,
+                token,
+                group_fields,
+                aggregate_fields,
+                filters,
+                timeout=timeout,
+                retries=1,
+            )
+        )
+    return rows
 
 
 def _get_transaction_fields(base_url, token):
@@ -312,26 +369,13 @@ def build_procurement_diagnostics(days=180):
 
         tx_field = _pick(fields, ("TransactionType.Code", "TransactionType", "TransactionType.Name"))
         document_field = _pick(fields, ("Document", "Document.Number", "Document.Num"))
-
-        supplier_fields = _field_candidates(fields, SUPPLIER_TOKENS)
         supplier_name_field = _supplier_name_field(fields)
         supplier_type_field = _supplier_type_field(fields)
-        # Contr-* fields are useful on older iiko builds even when they are not
-        # explicitly named Supplier/Counteragent.
-        fallback_counterparty = [
-            name for name in (
-                "Contr-Account.Name", "Contr-Account", "Contr-Account.Code",
-                "Account.Name", "Account", "Account.Code",
-            )
-            if name in fields and _allowed(fields, name, "groupingAllowed")
-        ]
-        counterparty_fields = []
-        for name in [supplier_name_field, supplier_type_field, *supplier_fields, *fallback_counterparty]:
-            if name and name not in counterparty_fields:
-                counterparty_fields.append(name)
-
         product_field = _pick(fields, ("Product.Name", "Contr-Product.Name"))
         unit_field = _pick(fields, ("Product.MeasureUnit", "Contr-Product.MeasureUnit"))
+
+        if not supplier_name_field or not product_field:
+            raise RuntimeError("iikoServer does not expose supplier/product fields required for procurement analytics")
 
         aggregate_fields = [
             name for name in ("Amount.In", "Sum.Incoming", "Product.AvgSum", "Amount.StoreInOutTyped")
@@ -340,110 +384,93 @@ def build_procurement_diagnostics(days=180):
         if not aggregate_fields:
             raise RuntimeError("No incoming amount/cost aggregates found in TRANSACTIONS")
 
-        discovery_groups = []
-        for name in [date_field, tx_field, document_field, *counterparty_fields[:6]]:
-            if name and name not in discovery_groups and _allowed(fields, name, "groupingAllowed"):
-                discovery_groups.append(name)
+        detail_groups = []
+        for name in [
+            date_field,
+            tx_field,
+            document_field,
+            supplier_name_field,
+            supplier_type_field,
+            product_field,
+            unit_field,
+        ]:
+            if name and name not in detail_groups and _allowed(fields, name, "groupingAllowed"):
+                detail_groups.append(name)
 
-        rows = _olap(
-            base_url, token,
-            discovery_groups,
+        detail_rows = _query_rows_chunked(
+            base_url,
+            token,
+            detail_groups,
             aggregate_fields,
-            _date_filter(date_field, date_from, date_to),
-            timeout=105,
+            date_field,
+            date_from,
+            date_to,
+            chunk_days=60 if days > 90 else 90,
+            timeout=55,
+        )
+
+        supplier_rollup = _supplier_rollup(
+            detail_rows,
+            date_field,
+            document_field,
+            product_field,
+            unit_field,
+            supplier_name_field,
+            supplier_type_field,
         )
 
         tx_values = []
-        supplier_values = {}
-        marker_rows = 0
+        supplier_names = []
+        supplier_types = []
         positive_incoming_rows = 0
-        inspect_fields = [field for field in [tx_field, document_field, *counterparty_fields] if field]
+        marker_rows = 0
+        price_evidence = []
 
-        for row in rows:
+        inspect_fields = [field for field in (tx_field, document_field, supplier_name_field, supplier_type_field) if field]
+        for row in detail_rows:
             if tx_field:
                 value = _norm(row.get(tx_field))
-                if value and value not in tx_values and len(tx_values) < 120:
+                if value and value not in tx_values and len(tx_values) < 80:
                     tx_values.append(value)
-            for field in counterparty_fields:
-                value = _norm(row.get(field))
-                if value:
-                    bucket = supplier_values.setdefault(field, [])
-                    if value not in bucket and len(bucket) < 80:
-                        bucket.append(value)
+
+            name = _norm(row.get(supplier_name_field))
+            if name and name not in supplier_names and len(supplier_names) < 80:
+                supplier_names.append(name)
+            if supplier_type_field:
+                stype = _norm(row.get(supplier_type_field))
+                if stype and stype not in supplier_types:
+                    supplier_types.append(stype)
+
             if _purchase_marker(row, inspect_fields):
                 marker_rows += 1
-            if _num(row.get("Amount.In")) > 0 or _num(row.get("Sum.Incoming")) > 0:
+
+            amount = abs(_num(row.get("Amount.In")))
+            incoming_sum = abs(_num(row.get("Sum.Incoming")))
+            avg_sum = abs(_num(row.get("Product.AvgSum")))
+            if amount > 0 or incoming_sum > 0:
                 positive_incoming_rows += 1
 
-        price_evidence = []
-        supplier_rollup = []
-        if product_field:
-            detail_groups = []
-            for name in [
-                date_field,
-                tx_field,
-                document_field,
-                supplier_name_field,
-                supplier_type_field,
-                product_field,
-                unit_field,
-            ]:
-                if name and name not in detail_groups and _allowed(fields, name, "groupingAllowed"):
-                    detail_groups.append(name)
-
-            detail_rows = _olap(
-                base_url, token,
-                detail_groups,
-                aggregate_fields,
-                _date_filter(date_field, date_from, date_to),
-                timeout=120,
-            )
-            supplier_rollup = _supplier_rollup(
-                detail_rows,
-                date_field,
-                document_field,
-                product_field,
-                unit_field,
-                supplier_name_field,
-                supplier_type_field,
-            )
-            for row in detail_rows:
-                amount = abs(_num(row.get("Amount.In")))
-                incoming_sum = abs(_num(row.get("Sum.Incoming")))
-                avg_sum = abs(_num(row.get("Product.AvgSum")))
-                if amount <= 0 and incoming_sum <= 0:
-                    continue
-                unit_price = incoming_sum / amount if amount and incoming_sum else avg_sum
-                if unit_price <= 0:
-                    continue
-                supplier = _norm(row.get(supplier_name_field)) if supplier_name_field else ""
+            unit_price = incoming_sum / amount if amount and incoming_sum else avg_sum
+            if unit_price > 0 and len(price_evidence) < 12:
                 supplier_type = _norm(row.get(supplier_type_field)) if supplier_type_field else ""
-                if supplier_type_field and not _supplier_type_ok(supplier_type):
-                    continue
-                price_evidence.append({
-                    "date": _norm(row.get(date_field))[:10],
-                    "document": _norm(row.get(document_field)) if document_field else "",
-                    "supplier": supplier,
-                    "supplierType": supplier_type,
-                    "supplierField": supplier_name_field,
-                    "product": _norm(row.get(product_field)),
-                    "unit": _norm(row.get(unit_field)) if unit_field else "",
-                    "quantity": round(amount, 4),
-                    "sum": round(incoming_sum, 2),
-                    "unitPrice": round(unit_price, 4),
-                    "transaction": _norm(row.get(tx_field)) if tx_field else "",
-                })
-                if len(price_evidence) >= 40:
-                    break
+                if not supplier_type_field or _supplier_type_ok(supplier_type):
+                    price_evidence.append({
+                        "date": _norm(row.get(date_field))[:10],
+                        "document": _norm(row.get(document_field)) if document_field else "",
+                        "supplier": name,
+                        "supplierType": supplier_type,
+                        "supplierField": supplier_name_field,
+                        "product": _norm(row.get(product_field)),
+                        "unit": _norm(row.get(unit_field)) if unit_field else "",
+                        "quantity": round(amount, 4),
+                        "sum": round(incoming_sum, 2),
+                        "unitPrice": round(unit_price, 4),
+                        "transaction": _norm(row.get(tx_field)) if tx_field else "",
+                    })
 
-        likely_supplier_fields = [
-            field for field in supplier_fields
-            if supplier_values.get(field)
-        ]
-        fallback_with_values = [
-            field for field in fallback_counterparty
-            if supplier_values.get(field)
-        ]
+        supplier_values = {supplier_name_field: supplier_names}
+        if supplier_type_field:
+            supplier_values[supplier_type_field] = supplier_types
 
         return {
             "success": True,
@@ -454,22 +481,20 @@ def build_procurement_diagnostics(days=180):
                 "document": document_field,
                 "product": product_field,
                 "unit": unit_field,
-                "supplierNamedFields": likely_supplier_fields,
+                "supplierNamedFields": [supplier_name_field],
                 "supplierNameField": supplier_name_field,
                 "supplierTypeField": supplier_type_field,
-                "counterpartyFallbackFields": fallback_with_values,
+                "counterpartyFallbackFields": [],
                 "incomingAggregates": aggregate_fields,
             },
             "evidence": {
-                "discoveryRows": len(rows),
+                "discoveryRows": len(detail_rows),
                 "purchaseMarkerRows": marker_rows,
                 "positiveIncomingRows": positive_incoming_rows,
-                "supplierValues": {
-                    field: values[:25] for field, values in supplier_values.items() if values
-                },
+                "supplierValues": supplier_values,
                 "transactionValues": tx_values[:50],
                 "priceRowsFound": len(price_evidence),
-                "priceSamples": price_evidence[:12],
+                "priceSamples": price_evidence,
                 "suppliers": supplier_rollup,
                 "suppliersCount": len(supplier_rollup),
             },
@@ -482,10 +507,7 @@ def build_procurement_diagnostics(days=180):
                 ),
                 "canBuildProductSupplierMatrix": bool(supplier_rollup),
             },
-            "note": (
-                "Diagnostics only. Counterparty/account fields are treated as candidates until "
-                "their values are confirmed as real suppliers."
-            ),
+            "note": "Read-only procurement analytics built from incoming iiko transaction rows.",
         }
     finally:
         if base_url and token:
@@ -578,21 +600,52 @@ def build_supplier_history(supplier_name, days=30):
             if name and name not in group_fields and _allowed(fields, name, "groupingAllowed"):
                 group_fields.append(name)
 
-        filters = _date_filter(date_field, date_from, date_to)
+        supplier_filter = None
         server_filtered = False
         if _allowed(fields, supplier_name_field, "filteringAllowed"):
-            filters[supplier_name_field] = {
-                "filterType": "IncludeValues",
-                "values": [supplier_name],
+            supplier_filter = {
+                supplier_name_field: {
+                    "filterType": "IncludeValues",
+                    "values": [supplier_name],
+                }
             }
             server_filtered = True
 
-        rows = _olap(base_url, token, group_fields, aggregate_fields, filters, timeout=120)
-        if not server_filtered:
-            rows = [
-                row for row in rows
-                if _norm(row.get(supplier_name_field)).casefold() == supplier_name.casefold()
-            ]
+        try:
+            rows = _query_rows_chunked(
+                base_url,
+                token,
+                group_fields,
+                aggregate_fields,
+                date_field,
+                date_from,
+                date_to,
+                extra_filters=supplier_filter,
+                chunk_days=60,
+                timeout=45,
+            )
+        except (RuntimeError, requests.Timeout, requests.ConnectionError):
+            # Some iiko builds expose the field as filterable but become unstable
+            # on IncludeValues for long periods. Fall back to small date chunks
+            # and filter the already-grouped rows in Python.
+            server_filtered = False
+            rows = _query_rows_chunked(
+                base_url,
+                token,
+                group_fields,
+                aggregate_fields,
+                date_field,
+                date_from,
+                date_to,
+                extra_filters=None,
+                chunk_days=30,
+                timeout=45,
+            )
+
+        rows = [
+            row for row in rows
+            if _norm(row.get(supplier_name_field)).casefold() == supplier_name.casefold()
+        ]
 
         suppliers = _supplier_rollup(
             rows,
@@ -607,11 +660,32 @@ def build_supplier_history(supplier_name, days=30):
             (item for item in suppliers if item["name"].casefold() == supplier_name.casefold()),
             None,
         )
+
+        oldest = ""
+        newest = ""
+        history_points = 0
+        if supplier:
+            all_dates = [
+                point.get("date")
+                for product in supplier.get("products") or []
+                for point in product.get("history") or []
+                if point.get("date")
+            ]
+            history_points = len(all_dates)
+            if all_dates:
+                oldest = min(all_dates)
+                newest = max(all_dates)
+
         return {
             "success": True,
             "period": {"from": date_from, "to": date_to, "days": days},
             "supplier": supplier,
             "serverFiltered": server_filtered,
+            "historyMeta": {
+                "oldestDate": oldest,
+                "newestDate": newest,
+                "points": history_points,
+            },
         }
     finally:
         if base_url and token:
