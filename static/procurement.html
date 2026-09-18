@@ -244,11 +244,13 @@ async function loadSupplierHistory(){
     const oldest=meta.oldestDate||(dates.length?dates.sort()[0]:'');
     const newest=meta.newestDate||(dates.length?dates.sort().slice(-1)[0]:'');
     const points=Number(meta.points||dates.length||0);
+    const aliases=Array.isArray(meta.aliases)?meta.aliases:[];
+    const aliasNote=aliases.length>1?(' Объединено карточек поставщика в iiko: '+aliases.length+'.'):'';
     const extra=(oldest&&newest)?(' Данные по ценам: '+oldest+' — '+newest+'.'):'';
     const noOlder=oldest&&days>30&&new Date(oldest)>new Date(Date.now()-days*86400000+3*86400000);
     await finishSupplierProgress(true);
     statusBox.className='supplier-inline-loading success';
-    statusBox.textContent='Готово: период '+days+' дней загружен. '+Number(s.productsCount||0)+' позиций, '+Number(s.deliveries||0)+' поставок, '+points+' ценовых точек.'+extra+(noOlder?' Более ранних цен в выбранном периоде iiko не найдено.':'');
+    statusBox.textContent='Готово: период '+days+' дней загружен. '+Number(s.productsCount||0)+' позиций, '+Number(s.deliveries||0)+' поставок, '+points+' ценовых точек.'+extra+aliasNote+(noOlder?' Более ранних строк по найденным карточкам поставщика в этом источнике iiko нет.':'');
     button.textContent='Период загружен';
     setTimeout(()=>{if(!button.disabled)button.textContent='Загрузить период'},1400);
   }catch(e){
