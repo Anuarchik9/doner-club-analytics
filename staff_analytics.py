@@ -258,6 +258,10 @@ def _parse_schedule(nodes):
     return result
 
 
+def _department_key(value):
+    return "".join(ch for ch in str(value or "").strip().casefold().replace("ё", "е") if ch.isalnum())
+
+
 def _role_for(employee, role_id, roles_by_id, roles_by_code):
     role = roles_by_id.get(role_id) if role_id else None
     if not role:
@@ -317,6 +321,16 @@ def build_staff_analytics(date_from, date_to):
     cached = _CACHE.get(cache_key)
     if cached and cached["expires_at"] > time.time():
         return cached["value"]
+
+    try:
+        current_departments = core.get_departments()
+    except Exception:
+        current_departments = []
+    current_department_keys = {
+        _department_key(item.get("name"))
+        for item in current_departments
+        if item.get("name")
+    }
 
     base_url = token = None
     try:
@@ -483,6 +497,8 @@ def build_staff_analytics(date_from, date_to):
 
         departments = []
         for name, values in department_rollup.items():
+            key = _department_key(name)
+            current_in_iiko = key in current_department_keys if current_department_keys else None
             departments.append({
                 "name": name,
                 "employees": len(values["employees"]),
@@ -492,8 +508,13 @@ def build_staff_analytics(date_from, date_to):
                 "payment": round(values["payment"], 2),
                 "paymentPerHour": round(values["payment"] / (values["minutes"] / 60.0), 2)
                     if values["minutes"] > 0 and values["payment"] else None,
+                "currentInIikoCloud": current_in_iiko,
             })
         departments.sort(key=lambda x: (-x["hours"], x["name"].casefold()))
+        archived_departments = [
+            item for item in departments
+            if item.get("currentInIikoCloud") is False
+        ]
 
         roles = []
         for name, values in role_rollup.items():
@@ -534,8 +555,12 @@ def build_staff_analytics(date_from, date_to):
             },
             "employees": employee_rows,
             "departments": departments,
+            "archivedDepartments": archived_departments,
             "roles": roles,
             "diagnostics": {
+                "currentDepartmentNames": sorted(
+                    item.get("name") for item in current_departments if item.get("name")
+                ),
                 "scheduleError": schedule_error,
                 "salesByEmployeeAvailable": False,
                 "note": "iiko SALES OLAP does not expose employee-linked sales fields for this installation.",
