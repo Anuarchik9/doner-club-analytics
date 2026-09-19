@@ -4,9 +4,30 @@ The canonical visual reference for every main Analytics page is:
 
 `static/staff.html` — «Сотрудники и табелирование».
 
+The shared sizing source is `static/analytics-ui-standard.css`. Every main Analytics page must load this stylesheet after its page-specific CSS, so shared sizing cannot drift between pages.
+
 All pages in the burger menu must use the same visual scale. Page-specific layouts may differ, but typography, content width, control sizing and card/panel scale must follow this standard.
 
-## Desktop — canonical Staff scale (>= 1100px)
+## Base Staff scale (901–1099px)
+
+- Main content width: `max-width: 1720px`
+- Horizontal page padding: `38px`
+- Bottom page padding: `72px`
+- Base body font: `16px`
+- Sticky top bar height: `88px`
+- Logo: `52 × 52px`
+- Main H1: `clamp(54px, 4.6vw, 80px)`
+- Hero description: `15px`
+- Section H2: `23px`
+- KPI card minimum height: `164px`
+- KPI card / panel padding: `22px`
+- KPI label: `12px`
+- KPI value: `34px`
+- Panel H3: `18px`
+- Form controls / buttons: `56px` high
+- Table body: `13px`
+
+## Large desktop — canonical Staff scale (>= 1100px)
 
 - Main content width: `max-width: 1880px`
 - Horizontal page padding: `46px`
