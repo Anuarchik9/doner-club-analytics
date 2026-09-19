@@ -21,6 +21,9 @@ PURCHASE_TOKENS = (
     "постав", "закуп", "приход", "наклад", "поступ",
 )
 
+_PROCUREMENT_DIAGNOSTICS_CACHE = {}
+_PROCUREMENT_DIAGNOSTICS_TTL = 10 * 60
+
 
 def _norm(value):
     return re.sub(r"\s+", " ", str(value or "").strip())
@@ -123,16 +126,17 @@ def _query_rows_chunked(
     date_from,
     date_to,
     extra_filters=None,
-    chunk_days=90,
-    timeout=55,
+    chunk_days=30,
+    timeout=45,
 ):
-    rows = []
-    for chunk_from, chunk_to in _date_chunks(date_from, date_to, chunk_days):
+    chunks = list(_date_chunks(date_from, date_to, max(7, chunk_days)))
+
+    def fetch_range(chunk_from, chunk_to):
         filters = _date_filter(date_field, chunk_from, chunk_to)
         if extra_filters:
             filters.update(extra_filters)
-        rows.extend(
-            _olap(
+        try:
+            return _olap(
                 base_url,
                 token,
                 group_fields,
@@ -141,7 +145,40 @@ def _query_rows_chunked(
                 timeout=timeout,
                 retries=1,
             )
-        )
+        except Exception as error:
+            retryable = isinstance(error, (requests.Timeout, requests.ConnectionError))
+            message = str(error)
+            if not retryable:
+                retryable = any(code in message for code in ("HTTP 502", "HTTP 503", "HTTP 504"))
+            start_date = datetime.strptime(chunk_from, "%Y-%m-%d").date()
+            end_date = datetime.strptime(chunk_to, "%Y-%m-%d").date()
+            span = (end_date - start_date).days + 1
+            if not retryable or span <= 7:
+                raise
+            midpoint = start_date + timedelta(days=max(1, span // 2) - 1)
+            left = fetch_range(start_date.isoformat(), midpoint.isoformat())
+            right_start = midpoint + timedelta(days=1)
+            right = fetch_range(right_start.isoformat(), end_date.isoformat()) if right_start <= end_date else []
+            return left + right
+
+    rows = []
+    workers = min(3, max(1, len(chunks)))
+    if workers == 1:
+        for chunk_from, chunk_to in chunks:
+            rows.extend(fetch_range(chunk_from, chunk_to))
+        return rows
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="procurement-olap") as executor:
+        futures = {
+            executor.submit(fetch_range, chunk_from, chunk_to): index
+            for index, (chunk_from, chunk_to) in enumerate(chunks)
+        }
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+
+    for index in range(len(chunks)):
+        rows.extend(results.get(index, []))
     return rows
 
 
@@ -1860,6 +1897,12 @@ def build_procurement_diagnostics(days=180):
     today = datetime.now(core.LOCAL_TZ).date()
     date_from = (today - timedelta(days=days)).isoformat()
     date_to = today.isoformat()
+    cache_key = (days, date_to)
+    cached = _PROCUREMENT_DIAGNOSTICS_CACHE.get(cache_key)
+    if cached and cached.get("expires_at", 0) > time.time():
+        value = dict(cached["value"])
+        value["cache"] = {"hit": True, "ttlSeconds": _PROCUREMENT_DIAGNOSTICS_TTL}
+        return value
 
     base_url = token = None
     try:
@@ -1921,8 +1964,8 @@ def build_procurement_diagnostics(days=180):
             date_field,
             date_from,
             date_to,
-            chunk_days=365 if days >= 365 else (180 if days >= 180 else 120),
-            timeout=60,
+            chunk_days=60 if days >= 365 else 30,
+            timeout=45,
         )
 
         supplier_rollup = _supplier_rollup(
@@ -2015,7 +2058,7 @@ def build_procurement_diagnostics(days=180):
         if supplier_type_field:
             supplier_values[supplier_type_field] = supplier_types
 
-        return {
+        result = {
             "success": True,
             "period": {"from": date_from, "to": date_to, "days": days},
             "fieldSupport": {
@@ -2058,7 +2101,20 @@ def build_procurement_diagnostics(days=180):
                 "canBuildProductSupplierMatrix": bool(supplier_rollup),
             },
             "note": "Read-only procurement analytics built from incoming iiko transaction rows.",
+            "cache": {"hit": False, "ttlSeconds": _PROCUREMENT_DIAGNOSTICS_TTL},
         }
+        _PROCUREMENT_DIAGNOSTICS_CACHE[cache_key] = {
+            "value": result,
+            "expires_at": time.time() + _PROCUREMENT_DIAGNOSTICS_TTL,
+        }
+        if len(_PROCUREMENT_DIAGNOSTICS_CACHE) > 20:
+            oldest = sorted(
+                _PROCUREMENT_DIAGNOSTICS_CACHE,
+                key=lambda key: _PROCUREMENT_DIAGNOSTICS_CACHE[key]["expires_at"],
+            )[:5]
+            for old_key in oldest:
+                _PROCUREMENT_DIAGNOSTICS_CACHE.pop(old_key, None)
+        return result
     finally:
         if base_url and token:
             core.iiko_server_logout(base_url, token)
