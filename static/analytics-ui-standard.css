@@ -1,0 +1,82 @@
+/* Doner Club Analytics — canonical responsive scale.
+   Visual reference: static/staff.html ("Сотрудники и табелирование").
+   This file is loaded AFTER page-specific CSS and is the single source of
+   truth for shared sizing on tablet/desktop. Mobile <=900px stays page-specific. */
+
+@media (min-width:901px){
+  body{font-size:16px}
+  .wrap{max-width:1720px;margin:auto;padding:0 38px 72px}
+  .top{height:88px}
+  .logo{width:52px;height:52px;flex-basis:52px;border-radius:14px}
+  .brand{gap:15px}
+  .brand b{font-size:16px}
+  .brand small{font-size:12px}
+  .source,.live{font-size:12px;padding:8px 13px}
+
+  .hero{padding:48px 0 28px}
+  .eyebrow{font-size:12px}
+  h1{font-size:clamp(54px,4.6vw,80px);line-height:.95;margin:9px 0 10px;letter-spacing:-.06em}
+  .hero p,.hero .muted{max-width:1050px;font-size:15px;line-height:1.65}
+
+  .filters{gap:14px;padding:19px;border-radius:22px}
+  .field label{font-size:11px;margin-bottom:8px}
+  .field select,.field input,.date-box input{height:56px;border-radius:14px;padding-left:16px;padding-right:16px;font-size:15px}
+  .go{height:56px;border-radius:14px;padding:0 30px;font-size:14px}
+  .preset{font-size:12px;padding:8px 13px}
+
+  .section{margin:34px 0 14px}
+  .section h2{font-size:23px}
+  .section span,.section .muted{font-size:13px}
+
+  .cards{gap:15px}
+  .card{min-height:164px;padding:22px}
+  .label{font-size:12px}
+  .value{font-size:34px;margin-top:18px}
+  .sub{font-size:11px;margin-top:10px}
+
+  .grid{gap:15px}
+  .panel{padding:22px}
+  .panel h3{font-size:18px}
+
+  table th{font-size:11px;padding:14px 11px}
+  table td{font-size:13px;padding:15px 11px}
+}
+
+@media (min-width:1100px){
+  body{font-size:17px}
+  .wrap{max-width:1880px;padding:0 46px 84px}
+  .top{height:98px}
+  .logo{width:58px;height:58px;flex-basis:58px;border-radius:14px}
+  .brand{gap:17px}
+  .brand b{font-size:18px}
+  .brand small{font-size:13px}
+  .source,.live{font-size:13px;padding:9px 14px}
+
+  .hero{padding:56px 0 34px}
+  .eyebrow{font-size:13px}
+  h1{font-size:clamp(66px,5.2vw,94px)}
+  .hero p,.hero .muted{max-width:1220px;font-size:17px}
+
+  .filters{gap:16px;padding:22px}
+  .field label{font-size:12px}
+  .field select,.field input,.date-box input{height:60px;font-size:16px}
+  .go{height:60px;font-size:15px;padding:0 34px}
+  .preset{font-size:13px;padding:9px 15px}
+
+  .section{margin:40px 0 16px}
+  .section h2{font-size:27px}
+  .section span,.section .muted{font-size:14px}
+
+  .cards{gap:17px}
+  .card{min-height:190px;padding:26px}
+  .label{font-size:14px}
+  .value{font-size:41px;margin-top:21px}
+  .sub{font-size:12.5px;margin-top:12px}
+
+  .grid{gap:17px}
+  .panel{padding:26px}
+  .panel h3{font-size:21px}
+
+  table th{font-size:12px;padding:16px 12px}
+  table td{font-size:14px;padding:17px 12px}
+}
