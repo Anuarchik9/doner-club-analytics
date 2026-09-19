@@ -4,24 +4,24 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    /* Main revision page: use the wide desktop canvas and stop rendering tiny copy. */
-    body{font-size:16px!important}
-    .wrap{max-width:1760px!important;padding-left:28px!important;padding-right:28px!important}
-    .brand b{font-size:16px!important}.brand small{font-size:12.5px!important}
-    .source{font-size:12px!important;padding:8px 12px!important}
-    .hero{padding-top:44px!important}.eyebrow{font-size:12px!important}
-    .hero h1{font-size:clamp(48px,5vw,72px)!important;line-height:.98!important}
-    .hero p{font-size:15px!important;line-height:1.65!important;max-width:980px!important}
-    .filters{gap:14px!important;padding:18px!important}
-    .field label{font-size:11px!important}
-    .field select,.field input{height:50px!important;font-size:15px!important;padding:0 14px!important}
-    .go{height:50px!important;font-size:15px!important;padding:0 24px!important}
-    .section{margin-top:34px!important;margin-bottom:14px!important}
-    .section h2{font-size:25px!important}.section .muted{font-size:13px!important}
-    .cards{gap:15px!important}.card{padding:22px!important;min-height:154px!important}
-    .label{font-size:12.5px!important}.value{font-size:39px!important}.sub{font-size:12.5px!important;line-height:1.55!important}
-    .grid{gap:15px!important}.panel{padding:22px!important}.panel h3{font-size:19px!important}.muted{font-size:13px!important;line-height:1.55!important}
-    .revision-row{font-size:14px!important;padding:15px 0!important}.revision-row b{font-size:14.5px!important}.pill{font-size:11px!important;padding:6px 10px!important}
+    /* Main revision page: shared desktop scale is identical to staff.html. */
+    body{font-size:17px!important}
+    .wrap{max-width:1880px!important;padding-left:46px!important;padding-right:46px!important}
+    .brand b{font-size:18px!important}.brand small{font-size:13px!important}
+    .source{font-size:13px!important;padding:9px 14px!important}
+    .hero{padding-top:56px!important}.eyebrow{font-size:13px!important}
+    .hero h1{font-size:clamp(66px,5.2vw,94px)!important;line-height:.95!important}
+    .hero p{font-size:17px!important;line-height:1.65!important;max-width:1220px!important}
+    .filters{gap:16px!important;padding:22px!important}
+    .field label{font-size:12px!important}
+    .field select,.field input{height:60px!important;font-size:16px!important;padding:0 16px!important}
+    .go{height:60px!important;font-size:15px!important;padding:0 34px!important}
+    .section{margin-top:40px!important;margin-bottom:16px!important}
+    .section h2{font-size:27px!important}.section .muted{font-size:14px!important}
+    .cards{gap:17px!important}.card{padding:26px!important;min-height:190px!important}
+    .label{font-size:14px!important}.value{font-size:41px!important}.sub{font-size:12.5px!important;line-height:1.55!important}
+    .grid{gap:17px!important}.panel{padding:26px!important}.panel h3{font-size:21px!important}.muted{font-size:14px!important;line-height:1.55!important}
+    .revision-row{font-size:14px!important;padding:17px 0!important}.revision-row b{font-size:14.5px!important}.pill{font-size:11px!important;padding:6px 10px!important}
     .note{font-size:13px!important;line-height:1.6!important}
 
     /* Management block added after data loads. */
@@ -83,7 +83,6 @@
     .rev-investigation-foot{font-size:10.5px!important;line-height:1.55!important}
 
     @media(max-width:1200px){
-      .wrap{padding-left:20px!important;padding-right:20px!important}
       .rev-product-drawer{width:calc(100vw - 22px)!important}
     }
     @media(max-width:900px){
