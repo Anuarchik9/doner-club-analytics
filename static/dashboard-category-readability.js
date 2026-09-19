@@ -4,23 +4,24 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    .wrap{max-width:1760px!important;padding-left:28px!important;padding-right:28px!important}
-    body{font-size:16px!important}
-    .hero h1{font-size:58px!important;line-height:1.04!important}
-    .hero #period{font-size:14px!important}
-    .section{margin-top:36px!important;margin-bottom:15px!important}
-    .section h2{font-size:26px!important;line-height:1.15!important}
-    .section>.muted{font-size:13px!important}
-    .panel{padding:24px!important}
-    .panel h3{font-size:19px!important;line-height:1.2!important}
-    .muted{font-size:13px!important;line-height:1.55!important}
-    .filters{gap:15px!important;padding:19px!important}
-    .field label{font-size:11.5px!important}
-    .field select,.field input{height:52px!important;font-size:15px!important;padding:0 15px!important}
-    .go{height:52px!important;font-size:15px!important;padding:0 25px!important}
-    .preset,.report-mode-btn{font-size:13.5px!important;padding:9px 14px!important}
-    .label{font-size:12.5px!important}
-    .value{font-size:42px!important}
+    /* Shared desktop sizing must match staff.html exactly. */
+    .wrap{max-width:1880px!important;padding-left:46px!important;padding-right:46px!important}
+    body{font-size:17px!important}
+    .hero h1{font-size:clamp(66px,5.2vw,94px)!important;line-height:.95!important}
+    .hero #period{font-size:17px!important}
+    .section{margin-top:40px!important;margin-bottom:16px!important}
+    .section h2{font-size:27px!important;line-height:1.15!important}
+    .section>.muted{font-size:14px!important}
+    .panel{padding:26px!important}
+    .panel h3{font-size:21px!important;line-height:1.2!important}
+    .muted{font-size:14px!important;line-height:1.55!important}
+    .filters{gap:16px!important;padding:22px!important}
+    .field label{font-size:12px!important}
+    .field select,.field input{height:60px!important;font-size:16px!important;padding:0 16px!important}
+    .go{height:60px!important;font-size:15px!important;padding:0 34px!important}
+    .preset,.report-mode-btn{font-size:13px!important;padding:9px 15px!important}
+    .label{font-size:14px!important}
+    .value{font-size:41px!important}
     .sub{font-size:12.5px!important;line-height:1.55!important}
 
     #categoryList{gap:15px!important}
@@ -52,9 +53,7 @@
     table{font-size:13.5px!important}th{font-size:11.5px!important}td{font-size:13.5px!important}
 
     @media(max-width:1200px){
-      .wrap{padding-left:22px!important;padding-right:22px!important}
       #categoryList .cat-row{grid-template-columns:minmax(200px,290px) minmax(220px,1fr) 125px!important}
-      .hero h1{font-size:52px!important}
     }
     @media(max-width:900px){
       body{font-size:15px!important}.wrap{padding-left:16px!important;padding-right:16px!important}
