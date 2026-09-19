@@ -232,7 +232,15 @@ async function getJson(url,attempt=0,timeoutMs=120000){
     if(attempt<1&&(r.status>=500||r.status===200)){await new Promise(x=>setTimeout(x,900));return getJson(url,attempt+1,timeoutMs)}
     throw new Error(r.status>=500?'iikoServer временно не ответил. Повторите запрос через несколько секунд.':'Не удалось получить данные. Обновите страницу и повторите запрос.');
   }
-  if(!r.ok||j.success===false)throw new Error(j.details||j.message||('HTTP '+r.status));
+  if(!r.ok||j.success===false){
+    const message=j.details||j.message||('HTTP '+r.status);
+    const retryable=r.status===502||r.status===503||r.status===504||/did not answer in time|timeout|timed out/i.test(message);
+    if(retryable&&attempt<2){
+      await new Promise(x=>setTimeout(x,1200*(attempt+1)));
+      return getJson(url,attempt+1,timeoutMs);
+    }
+    throw new Error(message);
+  }
   return j;
 }
 
