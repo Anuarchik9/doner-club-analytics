@@ -55,7 +55,7 @@ def install_dashboard_category_readability(app):
                 # Single authoritative dashboard category script. Older separate
                 # category patches are intentionally not injected anymore because
                 # two MutationObservers were repeatedly rebuilding the same rows.
-                readability_tag = '<script src="/static/dashboard-category-readability.js?v=20260917-6"></script>'
+                readability_tag = '<script src="/static/dashboard-category-readability.js?v=20260919-1"></script>'
                 if "dashboard-category-readability.js" not in body and "</body>" in body:
                     body = body.replace("</body>", readability_tag + "</body>", 1)
                     changed = True
