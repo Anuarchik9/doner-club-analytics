@@ -24,7 +24,7 @@ def install_revisions_ui(app):
                 # base styles and then visibly grows when the JS upsize runs.
                 critical_css = (
                     '<link rel="stylesheet" '
-                    'href="/static/revisions-critical.css?v=20260917-1">'
+                    'href="/static/revisions-critical.css?v=20260919-1">'
                 )
                 if "revisions-critical.css" not in body and "</head>" in body:
                     body = body.replace("</head>", critical_css + "</head>", 1)
@@ -41,7 +41,7 @@ def install_revisions_ui(app):
                     '<script src="/static/revision-investigation.js?v=20260916-2"></script>'
                     '<script src="/static/revision-product-close-hardfix.js?v=20260916-2"></script>'
                     '<script src="/static/revisions-ui.js?v=20260916-6"></script>'
-                    '<script src="/static/revision-readability-upsize.js?v=20260916-1"></script>'
+                    '<script src="/static/revision-readability-upsize.js?v=20260919-1"></script>'
                 )
                 if "/static/revision-details.js" not in body and "</body>" in body:
                     body = body.replace("</body>", tags + "</body>", 1)
