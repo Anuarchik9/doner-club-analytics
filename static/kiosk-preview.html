@@ -213,6 +213,13 @@ function addSimpleProduct(p){
   });
   updateCart();
 }
+function enableBackdropClose(){
+  var overlay=document.querySelector('#modalRoot .overlay');
+  if(!overlay)return;
+  overlay.onclick=function(event){
+    if(event.target===overlay)closeModal();
+  };
+}
 function openProduct(p){
   selected=p;
   var groups=(p.modifierGroups||[]).filter(function(g){return g.items&&g.items.length});
@@ -240,6 +247,7 @@ function openProduct(p){
         '<div class="actions"><button class="secondary" id="closeModal">'+t('Назад','Артқа')+'</button><button class="primary" id="confirmProduct">'+t('Добавить','Қосу')+' · '+money(p.price)+'</button></div>'+
       '</div>'+
     '</div></div>';
+  enableBackdropClose();
   document.getElementById('closeModal').onclick=closeModal;
   document.getElementById('closeProductTop').onclick=closeModal;
   document.querySelectorAll('.modInput').forEach(function(i){i.onchange=updateProductButton});
@@ -270,7 +278,7 @@ function updateCart(){
 function openCart(){
   if(!cart.length)return;
   document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal"><h2>'+t('Ваш заказ','Сіздің тапсырысыңыз')+'</h2><div id="cartLines"></div><div class="actions"><button class="secondary" id="closeModal">'+t('Продолжить выбор','Таңдауды жалғастыру')+'</button><button class="primary" id="goPay">'+t('Оплатить','Төлеу')+' · '+money(total())+'</button></div></div></div>';
-  paintCartLines();document.getElementById('closeModal').onclick=closeModal;document.getElementById('goPay').onclick=openPay;
+  enableBackdropClose();paintCartLines();document.getElementById('closeModal').onclick=closeModal;document.getElementById('goPay').onclick=openPay;
 }
 function paintCartLines(){
   var el=document.getElementById('cartLines');if(!el)return;
@@ -280,12 +288,14 @@ function paintCartLines(){
 }
 function openPay(){
   document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal"><h2>'+t('Способ оплаты','Төлем тәсілі')+'</h2><div class="paygrid"><button class="pay payChoice"><div style="font-size:42px">💳</div><b>ForteBank</b><span>'+t('Банковская карта / Apple Pay','Банк картасы / Apple Pay')+'</span></button><button class="pay payChoice"><div style="font-size:42px">▦</div><b>'+t('Единый QR','Бірыңғай QR')+'</b><span>'+t('QR на сумму заказа','Тапсырыс сомасына QR')+'</span></button></div><div class="actions"><button class="secondary" id="backCart">'+t('Назад','Артқа')+'</button></div></div></div>';
+  enableBackdropClose();
   document.getElementById('backCart').onclick=openCart;
   document.querySelectorAll('.payChoice').forEach(function(b){b.onclick=showSuccess});
 }
 function showSuccess(){
   var no=Math.floor(100+Math.random()*900);
   document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal center"><div class="success">✓</div><h2>'+t('Заказ принят','Тапсырыс қабылданды')+'</h2><div style="font-size:42px;font-weight:1000;margin:14px">№ '+no+'</div><p class="lead">'+t('Оплата и отправка в iiko пока в тестовом режиме.','Төлем және iiko-ға жіберу әзірге тест режимінде.')+'</p><button class="primary" id="finish" style="width:100%">'+t('Готово','Дайын')+'</button></div></div>';
+  enableBackdropClose();
   document.getElementById('finish').onclick=function(){cart=[];closeModal();updateCart()};
 }
 document.getElementById('ruBtn').onclick=function(){lang='ru';paint()};
