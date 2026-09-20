@@ -1720,8 +1720,10 @@ def kiosk_test_paid_order():
         correlation_id = result.get("correlationId")
         order_info = result.get("orderInfo") or {}
 
-        if correlation_id and order_info.get("creationStatus") == "InProgress":
-            for _ in range(8):
+        if correlation_id:
+            for _ in range(10):
+                if order_info.get("creationStatus") != "InProgress" and command_status:
+                    break
                 time.sleep(1)
                 status_response = iiko_kiosk_post(
                     "/api/1/commands/status",
@@ -1738,9 +1740,71 @@ def kiosk_test_paid_order():
                 else:
                     break
 
+        # IMPORTANT: adding a processed external payment to a table order is not
+        # the same operation as paying/closing the order in iikoFront. The order
+        # stays open until /api/1/order/close is called. Closing is the step that
+        # asks iikoFront to actually finalize/fiscalize the already-paid order.
+        order_id = str(order_info.get("id") or "").strip()
+        if not order_id:
+            return jsonify({
+                "success": False,
+                "code": "PAID_TEST_ORDER_ID_MISSING",
+                "message": "Order was created but iiko did not return an order ID, so it was NOT closed.",
+                "iiko": result,
+                "commandStatus": command_status,
+            }), 502
+
+        if command_status and command_status.get("state") == "Error":
+            return jsonify({
+                "success": False,
+                "code": "PAID_TEST_CREATE_COMMAND_ERROR",
+                "message": "iikoFront reported an error while creating the paid test order. Close was NOT requested.",
+                "iiko": result,
+                "commandStatus": command_status,
+            }), 502
+
+        close_response = iiko_kiosk_post(
+            "/api/1/order/close",
+            {
+                "organizationId": organization_id,
+                "orderId": order_id,
+            },
+            timeout=45,
+        )
+        if not close_response.ok:
+            return jsonify({
+                "success": False,
+                "code": "IIKO_PAID_ORDER_CLOSE_FAILED",
+                "statusCode": close_response.status_code,
+                "details": close_response.text[:3000],
+                "orderId": order_id,
+                "iiko": result,
+            }), 502
+
+        close_result = close_response.json()
+        close_status = None
+        close_correlation_id = close_result.get("correlationId")
+        if close_correlation_id:
+            for _ in range(12):
+                time.sleep(1)
+                close_status_response = iiko_kiosk_post(
+                    "/api/1/commands/status",
+                    {
+                        "organizationId": organization_id,
+                        "correlationId": close_correlation_id,
+                    },
+                    timeout=20,
+                )
+                if close_status_response.ok:
+                    close_status = close_status_response.json()
+                    if close_status.get("state") in ("Success", "Error"):
+                        break
+                else:
+                    break
+
         return jsonify({
-            "success": True,
-            "message": "Paid test order request was sent to iiko.",
+            "success": bool(not close_status or close_status.get("state") != "Error"),
+            "message": "Paid test order was created and close was requested in iiko.",
             "organizationId": organization_id,
             "terminalGroupId": terminal_group_id,
             "tableId": table_id,
@@ -1753,6 +1817,12 @@ def kiosk_test_paid_order():
             },
             "servicePrintRequested": True,
             "commandStatus": command_status,
+            "close": {
+                "requested": True,
+                "correlationId": close_correlation_id,
+                "commandStatus": close_status,
+                "response": close_result,
+            },
             "iiko": result,
         })
     except requests.Timeout:
