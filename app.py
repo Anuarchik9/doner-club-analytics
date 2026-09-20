@@ -1390,6 +1390,13 @@ def kiosk_test_order():
         payload = {
             "organizationId": organization_id,
             "terminalGroupId": terminal_group_id,
+            "createOrderSettings": {
+                # Ask iikoFront to save/send the order with service printing,
+                # while keeping the test order completely unpaid.
+                "servicePrint": True,
+                "transportToFrontTimeout": 10,
+                "checkStopList": True,
+            },
             "order": {
                 "tableIds": [table_id],
                 "items": order_items,
@@ -1412,12 +1419,39 @@ def kiosk_test_order():
             }), 502
 
         result = response.json()
+
+        # iiko table-order creation may be asynchronous. If it answers
+        # InProgress, check the command state for a few seconds so the kiosk
+        # can distinguish "request accepted" from "processed by iikoFront".
+        command_status = None
+        correlation_id = result.get("correlationId")
+        order_info = result.get("orderInfo") or {}
+        if correlation_id and order_info.get("creationStatus") == "InProgress":
+            for _ in range(6):
+                time.sleep(1)
+                status_response = iiko_post(
+                    "/api/1/commands/status",
+                    {
+                        "organizationId": organization_id,
+                        "correlationId": correlation_id,
+                    },
+                    timeout=20,
+                )
+                if status_response.ok:
+                    command_status = status_response.json()
+                    if command_status.get("state") in ("Success", "Error"):
+                        break
+                else:
+                    break
+
         return jsonify({
             "success": True,
             "message": "Test order request was sent to iiko.",
             "organizationId": organization_id,
             "terminalGroupId": terminal_group_id,
             "tableId": table_id,
+            "servicePrintRequested": True,
+            "commandStatus": command_status,
             "iiko": result,
         })
     except requests.Timeout:
