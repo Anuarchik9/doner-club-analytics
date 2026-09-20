@@ -1529,6 +1529,254 @@ def kiosk_test_order():
         }), 500
 
 
+@app.route("/kiosk-test-paid-order", methods=["POST"])
+def kiosk_test_paid_order():
+    data = request.get_json(silent=True) or {}
+
+    # Paid-test safety: this endpoint is available only on the dedicated kiosk
+    # Render service and only after an explicit final confirmation from the UI.
+    if os.environ.get("APP_MODE", "").strip().lower() != "kiosk":
+        return jsonify({
+            "success": False,
+            "code": "KIOSK_MODE_REQUIRED",
+            "message": "Paid test order was NOT sent. This endpoint is available only in kiosk mode.",
+        }), 403
+
+    if (
+        data.get("confirm") != "SEND_PAID_TEST_ORDER"
+        or data.get("acknowledgeFinancialEffect") is not True
+    ):
+        return jsonify({
+            "success": False,
+            "code": "PAID_TEST_CONFIRMATION_REQUIRED",
+            "message": "Paid test order was NOT sent. Explicit financial confirmation is required.",
+        }), 400
+
+    point = (data.get("point") or "Arai").strip()
+    terminal_group_id = str(data.get("terminalGroupId") or "").strip()
+    table_id = str(data.get("tableId") or "").strip()
+    incoming_items = data.get("items") or []
+
+    try:
+        payment_sum = round(float(data.get("paymentSum") or 0), 2)
+    except (TypeError, ValueError):
+        payment_sum = 0
+
+    # Keep the temporary test endpoint intentionally small. The production
+    # ForteBank flow will use a separate verified-payment endpoint later.
+    if payment_sum <= 0 or payment_sum > 5000:
+        return jsonify({
+            "success": False,
+            "code": "PAID_TEST_SUM_OUT_OF_RANGE",
+            "message": "For the temporary paid test, paymentSum must be greater than 0 and no more than 5000 KZT.",
+        }), 400
+
+    if not terminal_group_id or not table_id or not incoming_items:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_PAID_TEST_ORDER",
+            "message": "terminalGroupId, tableId and items are required.",
+        }), 400
+
+    try:
+        if not all([
+            os.environ.get("IIKO_KIOSK_API_KEY"),
+            os.environ.get("IIKO_KIOSK_APP_ID") or os.environ.get("IIKO_APP_ID"),
+            os.environ.get("IIKO_KIOSK_CLIENT_SECRET") or os.environ.get("IIKO_CLIENT_SECRET"),
+        ]):
+            return jsonify({
+                "success": False,
+                "code": "KIOSK_API_NOT_CONFIGURED",
+                "message": "Paid test order was NOT sent. Doner Club Kiosk iikoCloud credentials are not configured.",
+            }), 503
+
+        department, available_departments = find_department(point)
+        if not department:
+            return jsonify({
+                "success": False,
+                "code": "POINT_NOT_FOUND",
+                "message": f"Point '{point}' not found",
+                "availablePoints": [
+                    {"code": d.get("code"), "name": d.get("name")}
+                    for d in available_departments
+                ],
+            }), 404
+
+        organization_id = department["organizationId"]
+        terminal_groups, _ = get_terminal_groups_for_organization(organization_id)
+        allowed_group_ids = {str(group["id"]) for group in terminal_groups}
+        if terminal_group_id not in allowed_group_ids:
+            return jsonify({
+                "success": False,
+                "code": "INVALID_TERMINAL_GROUP",
+                "message": "Selected terminal group does not belong to Arai.",
+            }), 400
+
+        sections, _ = get_restaurant_sections_for_terminal_groups([terminal_group_id])
+        allowed_table_ids = {
+            str(table.get("id"))
+            for section in sections
+            for table in (section.get("tables") or [])
+            if table.get("id")
+        }
+        if table_id not in allowed_table_ids:
+            return jsonify({
+                "success": False,
+                "code": "INVALID_TABLE",
+                "message": "Selected table is not available for this terminal group.",
+            }), 400
+
+        order_items = []
+        for source_item in incoming_items:
+            product_id = str(source_item.get("productId") or "").strip()
+            if not product_id:
+                continue
+            try:
+                amount = float(source_item.get("amount") or 0)
+            except (TypeError, ValueError):
+                amount = 0
+            if amount <= 0:
+                continue
+
+            order_item = {
+                "productId": product_id,
+                "type": "Product",
+                "amount": amount,
+            }
+            product_size_id = source_item.get("productSizeId")
+            if product_size_id:
+                order_item["productSizeId"] = str(product_size_id)
+
+            modifiers = []
+            for modifier in source_item.get("modifiers") or []:
+                modifier_product_id = str(modifier.get("productId") or "").strip()
+                if not modifier_product_id:
+                    continue
+                modifier_payload = {
+                    "productId": modifier_product_id,
+                    "amount": float(modifier.get("amount") or 1),
+                }
+                product_group_id = modifier.get("productGroupId")
+                if product_group_id:
+                    modifier_payload["productGroupId"] = str(product_group_id)
+                modifiers.append(modifier_payload)
+            if modifiers:
+                order_item["modifiers"] = modifiers
+
+            order_items.append(order_item)
+
+        if not order_items:
+            return jsonify({
+                "success": False,
+                "code": "NO_VALID_ITEMS",
+                "message": "No valid order items were supplied.",
+            }), 400
+
+        payment_type_id = os.environ.get(
+            "IIKO_KIOSK_PAYMENT_TYPE_ID",
+            "d89a8bf4-b3d1-4625-8de3-6b0ef162e0c3",
+        )
+
+        payload = {
+            "organizationId": organization_id,
+            "terminalGroupId": terminal_group_id,
+            "createOrderSettings": {
+                "servicePrint": True,
+                "transportToFrontTimeout": 10,
+                "checkStopList": True,
+            },
+            "order": {
+                "tableIds": [table_id],
+                "items": order_items,
+                "guests": {
+                    "count": 1,
+                    "splitBetweenPersons": False,
+                },
+                "payments": [
+                    {
+                        "paymentTypeKind": "Card",
+                        "sum": payment_sum,
+                        "paymentTypeId": payment_type_id,
+                        "isProcessedExternally": True,
+                        "isFiscalizedExternally": False,
+                        "isPrepay": False,
+                    }
+                ],
+                "comment": "PAID TEST KIOSK — ВНЕШНЯЯ ТЕСТОВАЯ ОПЛАТА",
+            },
+        }
+
+        response = iiko_kiosk_post("/api/1/order/create", payload, timeout=45)
+        if not response.ok:
+            return jsonify({
+                "success": False,
+                "code": "IIKO_PAID_ORDER_CREATE_FAILED",
+                "statusCode": response.status_code,
+                "details": response.text[:3000],
+            }), 502
+
+        result = response.json()
+        command_status = None
+        correlation_id = result.get("correlationId")
+        order_info = result.get("orderInfo") or {}
+
+        if correlation_id and order_info.get("creationStatus") == "InProgress":
+            for _ in range(8):
+                time.sleep(1)
+                status_response = iiko_kiosk_post(
+                    "/api/1/commands/status",
+                    {
+                        "organizationId": organization_id,
+                        "correlationId": correlation_id,
+                    },
+                    timeout=20,
+                )
+                if status_response.ok:
+                    command_status = status_response.json()
+                    if command_status.get("state") in ("Success", "Error"):
+                        break
+                else:
+                    break
+
+        return jsonify({
+            "success": True,
+            "message": "Paid test order request was sent to iiko.",
+            "organizationId": organization_id,
+            "terminalGroupId": terminal_group_id,
+            "tableId": table_id,
+            "payment": {
+                "paymentTypeId": payment_type_id,
+                "paymentTypeKind": "Card",
+                "sum": payment_sum,
+                "isProcessedExternally": True,
+                "isFiscalizedExternally": False,
+            },
+            "servicePrintRequested": True,
+            "commandStatus": command_status,
+            "iiko": result,
+        })
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "code": "IIKO_TIMEOUT",
+            "message": "iiko did not answer in time.",
+        }), 504
+    except requests.HTTPError as error:
+        response = error.response
+        return jsonify({
+            "success": False,
+            "code": "IIKO_HTTP_ERROR",
+            "statusCode": response.status_code if response is not None else None,
+            "details": response.text[:3000] if response is not None else str(error),
+        }), 502
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "code": "KIOSK_PAID_TEST_ORDER_ERROR",
+            "message": str(error),
+        }), 500
+
+
 @app.route("/kiosk-menu")
 def kiosk_menu():
     point = request.args.get("point", "Arai").strip()
