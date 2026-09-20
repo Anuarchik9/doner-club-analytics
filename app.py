@@ -766,6 +766,11 @@ def build_receipt_analytics(point, date_from, date_to):
             iiko_server_logout(base_url, token)
 
 
+@app.route("/kiosk")
+def kiosk():
+    return app.send_static_file("kiosk-preview.html")
+
+
 @app.route("/")
 def home():
     return jsonify({
