@@ -672,7 +672,7 @@ function openTestIiko(){
   document.getElementById('modalRoot').innerHTML=
     '<div class="overlay"><div class="modal">'+
       '<h2>'+t('Тестовый заказ в iiko','iiko-ға тест тапсырыс')+'</h2>'+
-      '<div class="testIikoNotice">'+t('На этом экране ничего не отправляется автоматически. Реальный тестовый заказ уйдёт в iiko только после нажатия кнопки «Отправить тестовый заказ» и дополнительного подтверждения. Оплата не передаётся.','Бұл экранда ештеңе автоматты түрде жіберілмейді. Нақты тест тапсырыс тек «Тест тапсырысты жіберу» батырмасын басып, қосымша растағаннан кейін iiko-ға жіберіледі. Төлем жіберілмейді.')+'</div>'+
+      '<div class="testIikoNotice">'+t('На этом экране ничего не отправляется автоматически. Оплаченный тестовый заказ уйдёт в iiko только после нажатия зелёной кнопки и двух подтверждений.','Бұл экранда ештеңе автоматты түрде жіберілмейді. Төленген тест тапсырыс тек жасыл батырманы басып, екі рет растағаннан кейін iiko-ға жіберіледі.')+'</div>'+
       '<div class="testIikoPanel" id="testIikoPanel"><div class="testIikoStatus" id="testIikoStatus">'+t('Получаю кассы и столы Арай из iiko…','Арай кассалары мен үстелдерін iiko-дан алып жатырмын…')+'</div></div>'+
       '<button class="testIikoBack" id="testIikoBack">'+t('Назад в корзину','Себетке қайту')+'</button>'+
     '</div></div>';
@@ -701,8 +701,7 @@ async function loadTestIikoConfig(){
         '<div class="testIikoField"><label>'+t('Стол','Үстел')+'</label><select id="testTable"></select></div>'+
       '</div>'+
       '<div class="testIikoStatus" id="testConfigInfo"></div>'+
-      '<button class="testIikoSend" id="sendTestIiko">'+t('Отправить НЕОПЛАЧЕННЫЙ тест','ТӨЛЕНБЕГЕН тест жіберу')+'</button>'+
-      '<div class="paidTestWarning">'+t('Оплаченный тест будет записан в iiko как внешне оплаченная продажа типом оплаты Kiosk. Для безопасности тест ограничен суммой до 5 000 ₸.','Төленген тест iiko-да Kiosk төлем түрімен сырттан төленген сату ретінде жазылады. Қауіпсіздік үшін тест сомасы 5 000 ₸-ге дейін шектелген.')+'</div>'+
+      '<div class="paidTestWarning">'+t('Тест будет записан в iiko как внешне оплаченная продажа типом оплаты Kiosk. Для безопасности тест ограничен суммой до 5 000 ₸.','Тест iiko-да Kiosk төлем түрімен сырттан төленген сату ретінде жазылады. Қауіпсіздік үшін тест сомасы 5 000 ₸-ге дейін шектелген.')+'</div>'+
       '<button class="testIikoPaid" id="sendPaidTestIiko">'+t('Отправить ОПЛАЧЕННЫЙ тест · '+money(total()),'ТӨЛЕНГЕН тест жіберу · '+money(total()))+'</button>'+
       '<div id="testOrderResult"></div>';
 
@@ -715,7 +714,6 @@ async function loadTestIikoConfig(){
         var label=(x.sectionName?x.sectionName+' · ':'')+(x.name||('Стол '+(x.number==null?'':x.number)));
         return '<option value="'+esc(x.id)+'">'+esc(label)+'</option>';
       }).join('');
-      document.getElementById('sendTestIiko').disabled=!filtered.length;
       document.getElementById('sendPaidTestIiko').disabled=!filtered.length||total()>5000;
       document.getElementById('testConfigInfo').textContent=filtered.length
         ? t('Найдено столов: ','Үстелдер саны: ')+filtered.length
@@ -723,62 +721,9 @@ async function loadTestIikoConfig(){
     }
     terminal.onchange=fillTables;
     fillTables();
-    document.getElementById('sendTestIiko').onclick=sendTestIikoOrder;
     document.getElementById('sendPaidTestIiko').onclick=sendPaidTestIikoOrder;
   }catch(error){
     panel.innerHTML='<div class="testResult bad">'+t('Не удалось получить конфигурацию iiko. Ничего не отправлено.','iiko конфигурациясын алу мүмкін болмады. Ештеңе жіберілген жоқ.')+'<br><small>'+esc(error.message||error.details||error.code||'')+'</small></div>';
-  }
-}
-async function sendTestIikoOrder(){
-  var terminal=document.getElementById('testTerminal');
-  var table=document.getElementById('testTable');
-  var button=document.getElementById('sendTestIiko');
-  var result=document.getElementById('testOrderResult');
-  if(!terminal||!table||!terminal.value||!table.value)return;
-
-  var ok=window.confirm(t(
-    'Отправить РЕАЛЬНЫЙ тестовый заказ на кассу/кухню Арай? Оплата передаваться не будет.',
-    'Арай кассасына/ас үйіне НАҚТЫ тест тапсырыс жіберілсін бе? Төлем жіберілмейді.'
-  ));
-  if(!ok)return;
-
-  button.disabled=true;
-  button.textContent=t('Отправляю в iiko…','iiko-ға жіберіп жатырмын…');
-  result.innerHTML='';
-  try{
-    var response=await fetch('/kiosk-test-order',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        confirm:'SEND_TEST_ORDER',
-        point:'Arai',
-        terminalGroupId:terminal.value,
-        tableId:table.value,
-        items:testOrderItemsPayload()
-      })
-    });
-    var data=await response.json();
-    if(!response.ok||!data.success)throw data;
-    var info=(data.iiko&&data.iiko.orderInfo)||{};
-    var commandState=(data.commandStatus&&data.commandStatus.state)||'';
-    result.innerHTML='<div class="testResult ok"><b>'+t('Запрос отправлен в iiko.','Сұрау iiko-ға жіберілді.')+'</b><br>'+
-      t('Создание заказа: ','Тапсырыс жасау: ')+esc(info.creationStatus||'—')+
-      (commandState?'<br>'+t('Обработка iikoFront: ','iikoFront өңдеуі: ')+esc(commandState):'')+
-      '<br>'+t('Сервисная печать: запрошена','Сервистік басып шығару: сұралды')+
-      (info.id?'<br>'+t('ID заказа: ','Тапсырыс ID: ')+esc(info.id):'')+
-      '<br>'+t('Теперь проверь кассу и кухонный принтер. Корзина специально не очищена.','Енді касса мен ас үй принтерін тексер. Себет әдейі тазаланған жоқ.')+'</div>';
-  }catch(error){
-    var message=error.message||error.details||error.code||'Неизвестная ошибка';
-    if(error.code==='KIOSK_API_NOT_CONFIGURED'){
-      message=t(
-        'Тестовая отправка временно заблокирована: нужно подключить отдельную iikoCloud-интеграцию «Doner Club Kiosk». Это сделано специально, чтобы заказы киоска больше не помечались источником «Analytics».',
-        'Тест жіберу уақытша бұғатталған: бөлек «Doner Club Kiosk» iikoCloud интеграциясын қосу керек. Бұл киоск тапсырыстары енді «Analytics» көзімен белгіленбеуі үшін жасалды.'
-      );
-    }
-    result.innerHTML='<div class="testResult bad"><b>'+t('Тестовый заказ не отправлен.','Тест тапсырыс жіберілген жоқ.')+'</b><br>'+esc(message)+'</div>';
-  }finally{
-    button.disabled=false;
-    button.textContent=t('Отправить тестовый заказ в iiko','Тест тапсырысты iiko-ға жіберу');
   }
 }
 async function sendPaidTestIikoOrder(){
