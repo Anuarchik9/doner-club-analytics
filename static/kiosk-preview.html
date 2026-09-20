@@ -13,8 +13,8 @@
 .status{margin-left:auto;background:#f3f0ec;border-radius:13px;padding:9px 12px;font-size:12px;font-weight:900;color:#675f58;white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}.status.ok{background:#edf7e9;color:#39782d}.status.err{background:#fff0ec;color:#a9472e}
 .langs{display:flex;background:#f1eeea;border-radius:12px;padding:3px}.langs button{padding:8px 10px;background:transparent;border-radius:9px;font-size:12px;font-weight:950;color:#777}.langs .on{background:#fff;color:var(--o);box-shadow:0 2px 8px #0001}
 .carthead{height:42px;background:#161616;color:#fff;border-radius:12px;padding:0 14px;font-weight:950}.cats{display:flex;gap:8px;padding:12px 20px 9px;overflow-x:auto;scrollbar-width:none}.cats::-webkit-scrollbar{display:none}.cat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;font-weight:950;white-space:nowrap}.cat.on{background:var(--o);border-color:var(--o);color:#fff}
-.content{flex:1;overflow:auto;padding:14px 22px 112px;width:100%;max-width:1040px;margin:0 auto}.titleRow{display:flex;align-items:flex-end;justify-content:space-between;margin:4px 0 14px}.titleRow h1{font-size:30px;margin:0}.hint{font-size:12px;font-weight:850;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px 26px}.menuAll{display:block}.menuSection{margin:0 0 34px}.menuSection h2{margin:0 0 14px;font-size:17px;letter-spacing:.04em;text-transform:uppercase}.card{background:transparent;border:0;border-radius:0;overflow:visible;box-shadow:none;min-width:0}.photo{height:auto;aspect-ratio:1/1;background:#91aa5a;overflow:hidden;position:relative;border-radius:16px}.photo img{width:100%;height:100%;object-fit:contain;object-position:center;display:block}.placeholder{width:100%;height:100%;display:grid;place-items:center;background:linear-gradient(135deg,#94a658,#b0c373);color:white;font-size:38px;font-weight:1000}
+.content{flex:1;overflow:auto;padding:14px 22px 112px;width:100%;max-width:1040px;margin:0 auto;scroll-behavior:smooth}.titleRow{display:flex;align-items:flex-end;justify-content:space-between;margin:4px 0 14px}.titleRow h1{font-size:30px;margin:0}.hint{font-size:12px;font-weight:850;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px 26px}.menuAll{display:block}.menuSection{margin:0 0 34px;scroll-margin-top:12px}.menuSection h2{margin:0 0 14px;font-size:17px;letter-spacing:.04em;text-transform:uppercase}.card{background:transparent;border:0;border-radius:0;overflow:visible;box-shadow:none;min-width:0}.photo{height:auto;aspect-ratio:1/1;background:#91aa5a;overflow:hidden;position:relative;border-radius:16px}.photo img{width:100%;height:100%;object-fit:contain;object-position:center;display:block}.placeholder{width:100%;height:100%;display:grid;place-items:center;background:linear-gradient(135deg,#94a658,#b0c373);color:white;font-size:38px;font-weight:1000}
 .body{padding:10px 0 0;display:flex;flex-direction:column}.name{font-size:17px;font-weight:1000;line-height:1.12}.weight{font-size:11px;color:#777;font-weight:850}.desc{font-size:11px;color:var(--muted);line-height:1.35;margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.bottom{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}.price{font-size:15px;font-weight:1000;background:var(--o);color:#fff;padding:8px 11px;border-radius:10px;display:inline-flex;align-items:center}.price small{display:none}.add{width:44px;height:44px;border-radius:14px;background:var(--o);color:#fff;font-size:28px;font-weight:900;display:grid;place-items:center;line-height:1}
 .empty{grid-column:1/-1;background:#fff;border:1px solid var(--line);border-radius:24px;padding:36px;text-align:center;color:#756e68}.empty b{display:block;color:#111;font-size:21px;margin-bottom:8px}
 .orderbar{position:fixed;left:16px;right:16px;bottom:14px;height:76px;background:#151515;color:#fff;border-radius:22px;display:flex;align-items:center;padding:10px 14px 10px 18px;gap:14px;box-shadow:0 18px 45px #0003;z-index:15}.sumwrap{min-width:155px}.count{font-size:11px;color:#aaa;font-weight:800}.sum{font-size:23px;font-weight:1000}.items{flex:1;color:#c8c8c8;font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.checkout{height:52px;border-radius:16px;padding:0 22px;background:var(--o);color:#fff;font-weight:1000}.checkout:disabled{opacity:.4}
@@ -101,11 +101,60 @@ function bindProductButtons(root){
     };
   });
 }
+function updateNavActive(){
+  document.querySelectorAll('#cats [data-cat]').forEach(function(b){
+    b.classList.toggle('on', b.dataset.cat===activeCat);
+  });
+}
+function scrollToCategory(categoryId){
+  var content=document.querySelector('.content');
+  if(!content)return;
+  activeCat=categoryId;
+  updateNavActive();
+
+  if(categoryId==='all'){
+    content.scrollTo({top:0,behavior:'smooth'});
+    return;
+  }
+
+  var section=document.querySelector('[data-menu-section="'+CSS.escape(categoryId)+'"]');
+  if(!section)return;
+  var contentRect=content.getBoundingClientRect();
+  var sectionRect=section.getBoundingClientRect();
+  var target=content.scrollTop+(sectionRect.top-contentRect.top)-8;
+  content.scrollTo({top:Math.max(0,target),behavior:'smooth'});
+}
+function syncActiveCategoryFromScroll(){
+  var content=document.querySelector('.content');
+  if(!content||!categories.length)return;
+
+  if(content.scrollTop<70){
+    if(activeCat!=='all'){
+      activeCat='all';
+      updateNavActive();
+    }
+    return;
+  }
+
+  var contentTop=content.getBoundingClientRect().top;
+  var current=null;
+  categories.forEach(function(category){
+    var section=document.querySelector('[data-menu-section="'+CSS.escape(category.id)+'"]');
+    if(!section)return;
+    var top=section.getBoundingClientRect().top-contentTop;
+    if(top<=120) current=category.id;
+  });
+  if(current&&current!==activeCat){
+    activeCat=current;
+    updateNavActive();
+  }
+}
 function paint(){
   document.documentElement.lang=lang==='ru'?'ru':'kk';
   document.getElementById('ruBtn').classList.toggle('on',lang==='ru');
   document.getElementById('kzBtn').classList.toggle('on',lang==='kz');
   document.getElementById('hint').textContent=t('Внешнее меню iiko · Арай','iiko сыртқы мәзірі · Арай');
+  document.getElementById('title').textContent=t('Все меню','Барлық мәзір');
 
   var cats=document.getElementById('cats');
   var allButton='<button class="cat '+(activeCat==='all'?'on':'')+'" data-cat="all">'+t('Все меню','Барлық мәзір')+'</button>';
@@ -114,39 +163,26 @@ function paint(){
   }).join('');
   cats.querySelectorAll('[data-cat]').forEach(function(b){
     b.onclick=function(){
-      activeCat=b.dataset.cat;
-      paint();
+      scrollToCategory(b.dataset.cat);
     };
   });
 
   paintGrid();
+  var content=document.querySelector('.content');
+  if(content)content.onscroll=syncActiveCategoryFromScroll;
   updateCart();
 }
 function paintGrid(){
   var root=document.getElementById('grid');
+  root.className='menuAll';
 
-  if(activeCat==='all'){
-    document.getElementById('title').textContent=t('Все меню','Барлық мәзір');
-    root.className='menuAll';
-    var sections=categories.map(function(category){
-      var list=products.filter(function(p){return p.categoryId===category.id});
-      if(!list.length)return '';
-      return '<section class="menuSection"><h2>'+esc(categoryName(category))+'</h2><div class="grid">'+list.map(productCard).join('')+'</div></section>';
-    }).join('');
-    root.innerHTML=sections||'<div class="empty"><b>'+t('Пока нет доступных блюд','Әзірге қолжетімді тағамдар жоқ')+'</b></div>';
-    bindProductButtons(root);
-    return;
-  }
+  var sections=categories.map(function(category){
+    var list=products.filter(function(p){return p.categoryId===category.id});
+    if(!list.length)return '';
+    return '<section class="menuSection" data-menu-section="'+esc(category.id)+'"><h2>'+esc(categoryName(category))+'</h2><div class="grid">'+list.map(productCard).join('')+'</div></section>';
+  }).join('');
 
-  var category=categories.find(function(x){return x.id===activeCat});
-  document.getElementById('title').textContent=category?categoryName(category):'Kiosk Арай';
-  var list=products.filter(function(p){return p.categoryId===activeCat});
-  root.className='grid';
-  if(!list.length){
-    root.innerHTML='<div class="empty"><b>'+t('В этой категории пока нет блюд','Бұл санатта әзірге тағам жоқ')+'</b>'+t('Состав категории берётся напрямую из внешнего меню iiko.','Санат құрамы iiko сыртқы мәзірінен тікелей алынады.')+'</div>';
-    return;
-  }
-  root.innerHTML=list.map(productCard).join('');
+  root.innerHTML=sections||'<div class="empty"><b>'+t('Пока нет доступных блюд','Әзірге қолжетімді тағамдар жоқ')+'</b></div>';
   bindProductButtons(root);
 }
 function hasProductModifiers(p){
