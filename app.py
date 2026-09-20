@@ -1009,7 +1009,7 @@ def kiosk_menu():
             for group in (data.get("groups", []) or [])
         ]
 
-        return jsonify({
+        response = jsonify({
             "success": True,
             "source": "iikoCloud /api/1/nomenclature",
             "point": {
@@ -1021,6 +1021,8 @@ def kiosk_menu():
             "groups": groups,
             "products": products,
         })
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
     except requests.Timeout:
         return jsonify({
             "success": False,
