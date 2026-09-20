@@ -539,6 +539,18 @@ def iiko_server_logout(base_url, token):
         pass
 
 
+
+def iiko_server_products(base_url, token):
+    response = requests.get(
+        f"{base_url}/api/v2/entities/products/list",
+        params={"key": token, "includeDeleted": "false"},
+        headers={"Accept": "application/json"},
+        timeout=45,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, list) else (data.get("items") or data.get("response") or [])
+
 def iiko_server_departments(base_url, token):
     response = requests.get(
         f"{base_url}/api/corporation/departments",
@@ -966,8 +978,10 @@ def receipt_analytics():
 
 @app.route("/kiosk-menu")
 def kiosk_menu():
+    point = request.args.get("point", "Arai").strip()
+    base_url = None
+    token = None
     try:
-        point = request.args.get("point", "Arai").strip()
         department, available_departments = find_department(point)
         if not department:
             return jsonify({
@@ -979,49 +993,50 @@ def kiosk_menu():
                 ],
             }), 404
 
-        organization_id = department["organizationId"]
-        data = get_kiosk_nomenclature(organization_id)
+        # For the self-service kiosk we deliberately read the BASE sale price
+        # from iikoServer (defaultSalePrice). This is the same base price visible
+        # in the iiko nomenclature card and is separate from delivery/web prices.
+        base_url, token = iiko_server_auth()
+        raw_products = iiko_server_products(base_url, token)
 
         products = []
-        for product in data.get("products", []) or []:
-            size_prices = kiosk_product_price(product)
-            if not size_prices:
+        for product in raw_products:
+            if product.get("deleted"):
+                continue
+            raw_price = product.get("defaultSalePrice")
+            try:
+                base_price = float(raw_price)
+            except (TypeError, ValueError):
+                continue
+            if base_price <= 0:
                 continue
             products.append({
                 "id": product.get("id"),
                 "name": product.get("name"),
                 "code": product.get("code"),
+                "num": product.get("num"),
                 "type": product.get("type"),
-                "parentGroup": product.get("parentGroup"),
+                "parentGroup": product.get("parent"),
                 "description": product.get("description"),
-                "imageLinks": product.get("imageLinks") or [],
-                "sizePrices": size_prices,
-                "price": size_prices[0]["price"],
+                "basePrice": round(base_price, 2),
+                "price": round(base_price, 2),
+                "defaultIncludedInMenu": product.get("defaultIncludedInMenu"),
             })
-
-        groups = [
-            {
-                "id": group.get("id"),
-                "name": group.get("name"),
-                "parentGroup": group.get("parentGroup"),
-                "isGroupModifier": group.get("isGroupModifier"),
-            }
-            for group in (data.get("groups", []) or [])
-        ]
 
         response = jsonify({
             "success": True,
-            "source": "iikoCloud /api/1/nomenclature",
+            "source": "iikoServer defaultSalePrice",
+            "priceType": "BASE",
+            "priceLabel": "Базовая цена iiko",
             "point": {
                 "code": department.get("code"),
                 "name": department.get("name"),
-                "organizationId": organization_id,
+                "organizationId": department.get("organizationId"),
             },
-            "revision": data.get("revision"),
-            "groups": groups,
             "products": products,
         })
         response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Cache-Control"] = "no-store"
         return response
     except requests.Timeout:
         return jsonify({
@@ -1043,6 +1058,10 @@ def kiosk_menu():
             "code": "KIOSK_MENU_ERROR",
             "message": str(error),
         }), 500
+    finally:
+        if base_url and token:
+            iiko_server_logout(base_url, token)
+
 
 @app.route("/analytics")
 def analytics():
