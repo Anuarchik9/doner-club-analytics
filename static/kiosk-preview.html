@@ -49,6 +49,7 @@
 var lang='ru', categories=[], products=[], activeCat=null, cart=[], selected=null, menuReady=false, retryTimer=null;
 var CAT_KZ={'Комбо':'Комбо','Донер':'Донерлер','Донеры':'Донерлер','Бар':'Сусындар','Напитки':'Сусындар','Чаи':'Шай','Сладости':'Тәттілер','Дополнительное':'Қосымша','Дополнительно':'Қосымша','Батоны':'Батондар','Фри':'Фри','Стрипсы':'Стрипстер','Акции':'Науқандар'};
 var MENU_CACHE_KEY='donerclub-kiosk-arai-menu-v1', MENU_CACHE_TTL=10*60*1000;
+var CART_SESSION_KEY='donerclub-kiosk-arai-cart-v1';
 var navScrollLockUntil=0;
 function t(ru,kz){return lang==='ru'?ru:kz}
 function money(n){return Number(n||0).toLocaleString('ru-RU')+' ₸'}
@@ -58,6 +59,28 @@ function count(){return cart.reduce(function(s,x){return s+x.q},0)}
 function total(){return cart.reduce(function(s,x){return s+x.q*x.unitPrice},0)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})}
 
+function restoreCartSession(){
+  try{
+    var raw=sessionStorage.getItem(CART_SESSION_KEY);
+    if(!raw)return;
+    var saved=JSON.parse(raw);
+    if(!Array.isArray(saved))return;
+    cart=saved.filter(function(x){
+      return x&&Number(x.q)>0&&Number.isFinite(Number(x.unitPrice));
+    }).map(function(x){
+      x.q=Math.max(1,Math.floor(Number(x.q)||1));
+      x.unitPrice=Number(x.unitPrice)||0;
+      x.mods=Array.isArray(x.mods)?x.mods:[];
+      x.modifierIds=Array.isArray(x.modifierIds)?x.modifierIds:[];
+      return x;
+    });
+  }catch(e){}
+}
+function persistCartSession(){
+  try{
+    sessionStorage.setItem(CART_SESSION_KEY,JSON.stringify(cart));
+  }catch(e){}
+}
 function pushMenuNow(){
   try{localStorage.removeItem(MENU_CACHE_KEY)}catch(e){}
   var badge=document.getElementById('pointBadge');
@@ -465,6 +488,7 @@ function confirmProduct(){
 }
 function closeModal(){document.getElementById('modalRoot').innerHTML=''}
 function updateCart(){
+  persistCartSession();
   var n=count(),s=total();
   document.getElementById('cartHead').textContent=t('Корзина','Себет')+' · '+n;
   document.getElementById('count').textContent=n?n+' '+t('поз.','поз.'):t('Корзина пуста','Себет бос');
@@ -656,6 +680,7 @@ document.getElementById('kzBtn').onclick=function(){lang='kz';paint()};
 document.getElementById('cartHead').onclick=openCart;
 document.getElementById('checkout').onclick=openCart;
 
+restoreCartSession();
 paint();if(!pushedOnOpen)loadMenu();
 </script>
 </body></html>
