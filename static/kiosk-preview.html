@@ -756,10 +756,13 @@ async function sendTestIikoOrder(){
     var data=await response.json();
     if(!response.ok||!data.success)throw data;
     var info=(data.iiko&&data.iiko.orderInfo)||{};
+    var commandState=(data.commandStatus&&data.commandStatus.state)||'';
     result.innerHTML='<div class="testResult ok"><b>'+t('Запрос отправлен в iiko.','Сұрау iiko-ға жіберілді.')+'</b><br>'+
-      t('Статус: ','Күйі: ')+esc(info.creationStatus||'—')+
+      t('Создание заказа: ','Тапсырыс жасау: ')+esc(info.creationStatus||'—')+
+      (commandState?'<br>'+t('Обработка iikoFront: ','iikoFront өңдеуі: ')+esc(commandState):'')+
+      '<br>'+t('Сервисная печать: запрошена','Сервистік басып шығару: сұралды')+
       (info.id?'<br>'+t('ID заказа: ','Тапсырыс ID: ')+esc(info.id):'')+
-      '<br>'+t('Теперь проверь кассу и кухню Арай. Корзина специально не очищена.','Енді Арай кассасы мен ас үйін тексер. Себет әдейі тазаланған жоқ.')+'</div>';
+      '<br>'+t('Теперь проверь кассу и кухонный принтер. Корзина специально не очищена.','Енді касса мен ас үй принтерін тексер. Себет әдейі тазаланған жоқ.')+'</div>';
   }catch(error){
     result.innerHTML='<div class="testResult bad"><b>'+t('iiko не принял тестовый заказ.','iiko тест тапсырысты қабылдамады.')+'</b><br>'+esc(error.message||error.details||error.code||'Неизвестная ошибка')+'</div>';
   }finally{
