@@ -15,7 +15,7 @@
 .carthead{height:42px;background:#161616;color:#fff;border-radius:12px;padding:0 14px;font-weight:950}.cats{display:flex;gap:8px;padding:12px 20px 9px;overflow-x:auto;scrollbar-width:none}.cats::-webkit-scrollbar{display:none}.cat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;font-weight:950;white-space:nowrap}.cat.on{background:var(--o);border-color:var(--o);color:#fff}
 .content{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 22px 112px;width:100%;max-width:none;margin:0;scroll-behavior:smooth;scrollbar-width:auto;scrollbar-color:#9c9c9c #f3f0ec}.content::-webkit-scrollbar{width:14px}.content::-webkit-scrollbar-track{background:#f3f0ec}.content::-webkit-scrollbar-thumb{background:#9c9c9c;border-radius:10px;border:3px solid #f3f0ec}.content::-webkit-scrollbar-thumb:hover{background:#7f7f7f}.content>.titleRow,.content>#setup,.content>#grid{width:100%;max-width:1040px;margin-left:auto;margin-right:auto}.titleRow{display:flex;align-items:flex-end;justify-content:space-between;margin:4px 0 14px}.titleRow h1{font-size:30px;margin:0}.hint{font-size:12px;font-weight:850;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px 26px}.menuAll{display:block}.menuSection{margin:0 0 34px;scroll-margin-top:12px}.menuSection h2{margin:0 0 14px;font-size:17px;letter-spacing:.04em;text-transform:uppercase}.card{background:transparent;border:0;border-radius:0;overflow:visible;box-shadow:none;min-width:0}.photo{height:auto;aspect-ratio:1/1;background:#91aa5a;overflow:hidden;position:relative;border-radius:16px}.photo img{width:100%;height:100%;object-fit:contain;object-position:center;display:block}.placeholder{width:100%;height:100%;display:grid;place-items:center;background:linear-gradient(135deg,#94a658,#b0c373);color:white;font-size:38px;font-weight:1000}
-.body{padding:10px 0 0;display:flex;flex-direction:column}.name{font-size:17px;font-weight:1000;line-height:1.12}.weight{font-size:11px;color:#777;font-weight:850}.desc{font-size:11px;color:var(--muted);line-height:1.35;margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.bottom{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}.price{font-size:15px;font-weight:1000;background:var(--o);color:#fff;padding:8px 11px;border-radius:10px;display:inline-flex;align-items:center}.price small{display:none}.add{width:44px;height:44px;border-radius:14px;background:var(--o);color:#fff;font-size:28px;font-weight:900;display:grid;place-items:center;line-height:1}
+.body{padding:10px 0 0;display:flex;flex-direction:column}.name{font-size:17px;font-weight:1000;line-height:1.12}.weight{font-size:11px;color:#777;font-weight:850}.desc{font-size:11px;color:var(--muted);line-height:1.35;margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.bottom{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}.price{font-size:15px;font-weight:1000;background:var(--o);color:#fff;padding:8px 11px;border-radius:10px;display:inline-flex;align-items:center}.price small{display:none}.add{width:44px;height:44px;border-radius:14px;background:var(--o);color:#fff;font-size:28px;font-weight:900;display:grid;place-items:center;line-height:1;transition:background .2s ease,transform .2s ease}.cardAction{display:flex;align-items:center;justify-content:flex-end;min-width:44px}.cardQty{height:44px;min-width:112px;border-radius:14px;background:#08ae82;color:#fff;display:grid;grid-template-columns:38px 1fr 38px;align-items:center;overflow:hidden;box-shadow:0 8px 18px rgba(8,174,130,.18)}.cardQty button{height:44px;color:#fff;font-size:22px;font-weight:1000;display:grid;place-items:center}.cardQty span{text-align:center;font-weight:1000;font-size:14px}.addedBadge{height:44px;min-width:92px;padding:0 13px;border-radius:14px;background:#08ae82;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:1000;box-shadow:0 8px 18px rgba(8,174,130,.18)}.addedPulse{animation:addedPulse .55s cubic-bezier(.2,.8,.2,1)}.orderbar.cartPulse{animation:cartPulse .55s ease}.carthead.cartPulse{animation:cartPulse .55s ease}@keyframes addedPulse{0%{transform:scale(1)}40%{transform:scale(1.025);filter:brightness(1.04)}100%{transform:scale(1)}}@keyframes cartPulse{0%{transform:scale(1)}40%{transform:scale(1.018)}100%{transform:scale(1)}}
 .empty{grid-column:1/-1;background:#fff;border:1px solid var(--line);border-radius:24px;padding:36px;text-align:center;color:#756e68}.empty b{display:block;color:#111;font-size:21px;margin-bottom:8px}
 .orderbar{position:fixed;left:16px;right:16px;bottom:14px;height:76px;background:#151515;color:#fff;border-radius:22px;display:flex;align-items:center;padding:10px 14px 10px 18px;gap:14px;box-shadow:0 18px 45px #0003;z-index:15}.sumwrap{min-width:155px}.count{font-size:11px;color:#aaa;font-weight:800}.sum{font-size:23px;font-weight:1000}.items{flex:1;color:#c8c8c8;font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.checkout{height:52px;border-radius:16px;padding:0 22px;background:var(--o);color:#fff;font-weight:1000}.checkout:disabled{opacity:.4}
 .overlay{position:fixed;inset:0;background:#0008;z-index:30;display:grid;place-items:center;padding:20px}.modal{width:min(760px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:30px;padding:26px}.productModal{width:min(1080px,96vw);padding:0;overflow:hidden;display:grid;grid-template-columns:minmax(320px,48%) 1fr}.productHero{min-height:590px;background:#93a75b;display:flex;align-items:center;justify-content:center;overflow:hidden}.productHero img{width:100%;height:100%;min-height:590px;object-fit:contain;display:block}.productInfo{padding:28px 30px;max-height:92vh;overflow:auto}.productTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.productClose{width:38px;height:38px;border-radius:50%;background:#f3f0ec;color:#333;font-size:22px;line-height:1;flex:0 0 auto}.productMeta{font-size:12px;font-weight:900;color:#766f69;margin:4px 0 8px}.modal h2{font-size:30px;margin:0 0 8px}.lead{margin:0 0 18px;color:var(--muted);line-height:1.4}.section{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:#888;font-weight:950;margin:18px 0 8px}.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:16px;padding:13px 14px;margin:8px 0}.opt input{width:22px;height:22px;accent-color:var(--o)}.optmain{flex:1}.optn{font-weight:950}.optnote{font-size:11px;color:#888;margin-top:2px}.tag{font-size:12px;font-weight:950;color:#333}.actions{display:flex;gap:12px;margin-top:20px}.secondary,.primary{height:54px;border-radius:16px;font-weight:1000}.secondary{flex:1;background:#f2efeb}.primary{flex:1.5;background:var(--o);color:#fff}.cartline{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #eee}.mods{font-size:11px;color:#777;margin-top:4px}.qty{display:inline-flex;align-items:center;border:1px solid #ddd;border-radius:11px;overflow:hidden;margin-top:8px}.qty button{width:34px;height:32px;background:#f4f1ed;font-weight:1000}.qty span{width:34px;text-align:center;font-weight:900}.paygrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pay{padding:20px;border:1px solid var(--line);border-radius:20px;background:#fff;text-align:left}.pay b{display:block;font-size:19px;margin:8px 0}.pay span{font-size:12px;color:#777}.success{width:78px;height:78px;border-radius:50%;margin:0 auto 14px;background:#e8f5e4;color:#4b9538;display:grid;place-items:center;font-size:44px;font-weight:1000}.center{text-align:center}.setup{background:#fff7e7;border:1px solid #f1d79d;border-radius:15px;padding:13px 15px;margin-bottom:14px;color:#6c5726;font-size:12px;line-height:1.45}
@@ -81,24 +81,85 @@ async function loadMenu(){
     retryTimer=setTimeout(loadMenu,7000);
   }
 }
+function productQty(p){
+  return cart.reduce(function(sum,x){
+    return sum+(x.productId===p.id?x.q:0);
+  },0);
+}
+function cardActionHtml(p){
+  var q=productQty(p);
+  if(!q){
+    return '<button class="add" data-add-product="'+esc(p.id)+'" aria-label="'+t('Добавить в корзину','Себетке қосу')+'">+</button>';
+  }
+  if(hasProductModifiers(p)){
+    return '<button class="addedBadge" data-added-product="'+esc(p.id)+'" aria-label="'+t('Товар добавлен','Тауар қосылды')+'">✓ '+q+'</button>';
+  }
+  return '<div class="cardQty" data-qty-product="'+esc(p.id)+'"><button data-card-minus="'+esc(p.id)+'" aria-label="'+t('Уменьшить','Азайту')+'">−</button><span>'+q+'</span><button data-card-plus="'+esc(p.id)+'" aria-label="'+t('Увеличить','Көбейту')+'">+</button></div>';
+}
 function productCard(p){
   var pic=p.imageUrl?'<img src="'+esc(p.imageUrl)+'" alt="" loading="eager" decoding="async" onerror="this.parentNode.innerHTML=\'<div class=placeholder>DC</div>\'">':'<div class="placeholder">DC</div>';
   var w=p.weightGrams?Math.round(p.weightGrams)+' г':'';
-  return '<article class="card" data-card-product="'+esc(p.id)+'"><div class="photo">'+pic+'</div><div class="body"><div class="name">'+esc(productName(p))+' <span class="weight">'+esc(w)+'</span></div><div class="desc">'+esc(p.description||'')+'</div><div class="bottom"><div class="price">'+money(p.price)+'</div><button class="add" data-add-product="'+esc(p.id)+'" aria-label="'+t('Добавить в корзину','Себетке қосу')+'">+</button></div></div></article>';
+  return '<article class="card" data-card-product="'+esc(p.id)+'"><div class="photo">'+pic+'</div><div class="body"><div class="name">'+esc(productName(p))+' <span class="weight">'+esc(w)+'</span></div><div class="desc">'+esc(p.description||'')+'</div><div class="bottom"><div class="price">'+money(p.price)+'</div><div class="cardAction" data-action-product="'+esc(p.id)+'">'+cardActionHtml(p)+'</div></div></div></article>';
 }
 function bindProductButtons(root){
-  (root||document).querySelectorAll('[data-card-product]').forEach(function(card){
+  var scope=root||document;
+  scope.querySelectorAll('[data-card-product]').forEach(function(card){
     card.onclick=function(){
       var product=products.find(function(p){return p.id===card.dataset.cardProduct});
       if(product)handleProduct(product);
     };
   });
-  (root||document).querySelectorAll('[data-add-product]').forEach(function(b){
+  scope.querySelectorAll('[data-add-product]').forEach(function(b){
     b.onclick=function(event){
       event.stopPropagation();
       var product=products.find(function(p){return p.id===b.dataset.addProduct});
       if(product)handleProduct(product);
     };
+  });
+  scope.querySelectorAll('[data-card-plus]').forEach(function(b){
+    b.onclick=function(event){
+      event.stopPropagation();
+      var product=products.find(function(p){return p.id===b.dataset.cardPlus});
+      if(product)addSimpleProduct(product);
+    };
+  });
+  scope.querySelectorAll('[data-card-minus]').forEach(function(b){
+    b.onclick=function(event){
+      event.stopPropagation();
+      removeSimpleProduct(b.dataset.cardMinus);
+    };
+  });
+  scope.querySelectorAll('[data-added-product]').forEach(function(b){
+    b.onclick=function(event){
+      event.stopPropagation();
+      var product=products.find(function(p){return p.id===b.dataset.addedProduct});
+      if(product)openProduct(product);
+    };
+  });
+}
+function refreshCardActions(){
+  document.querySelectorAll('[data-action-product]').forEach(function(box){
+    var product=products.find(function(p){return p.id===box.dataset.actionProduct});
+    if(product)box.innerHTML=cardActionHtml(product);
+  });
+  bindProductButtons(document);
+}
+function animateAdded(productId){
+  var card=document.querySelector('[data-card-product="'+CSS.escape(productId)+'"]');
+  if(card){
+    card.classList.remove('addedPulse');
+    void card.offsetWidth;
+    card.classList.add('addedPulse');
+    setTimeout(function(){card.classList.remove('addedPulse')},600);
+  }
+  var bar=document.querySelector('.orderbar');
+  var top=document.getElementById('cartHead');
+  [bar,top].forEach(function(el){
+    if(!el)return;
+    el.classList.remove('cartPulse');
+    void el.offsetWidth;
+    el.classList.add('cartPulse');
+    setTimeout(function(){el.classList.remove('cartPulse')},600);
   });
 }
 function updateNavActive(){
@@ -202,6 +263,7 @@ function addSimpleProduct(p){
   if(x)x.q++;
   else cart.push({
     key:key,
+    productId:p.id,
     itemId:p.itemId,
     sizeId:p.sizeId,
     name:p.name,
@@ -212,6 +274,17 @@ function addSimpleProduct(p){
     modifierIds:[]
   });
   updateCart();
+  refreshCardActions();
+  animateAdded(p.id);
+}
+function removeSimpleProduct(productId){
+  var key=productId+'|';
+  var x=cart.find(function(z){return z.key===key});
+  if(!x)return;
+  x.q--;
+  if(x.q<=0)cart=cart.filter(function(z){return z!==x});
+  updateCart();
+  refreshCardActions();
 }
 function enableBackdropClose(){
   var overlay=document.querySelector('#modalRoot .overlay');
@@ -259,12 +332,16 @@ function updateProductButton(){
   document.getElementById('confirmProduct').textContent=t('Добавить','Қосу')+' · '+money(selected.price+extra);
 }
 function confirmProduct(){
+  var productId=selected.id;
   var mods=[],extra=0,modIds=[];
   document.querySelectorAll('.modInput:checked').forEach(function(i){mods.push(i.dataset.name);modIds.push(i.dataset.mid);extra+=Number(i.dataset.price||0)});
   var key=selected.id+'|'+modIds.sort().join(',');
   var x=cart.find(function(z){return z.key===key});
-  if(x)x.q++;else cart.push({key:key,itemId:selected.itemId,sizeId:selected.sizeId,name:selected.name,basePrice:selected.price,unitPrice:selected.price+extra,q:1,mods:mods,modifierIds:modIds});
-  closeModal();updateCart();
+  if(x)x.q++;else cart.push({key:key,productId:selected.id,itemId:selected.itemId,sizeId:selected.sizeId,name:selected.name,basePrice:selected.price,unitPrice:selected.price+extra,q:1,mods:mods,modifierIds:modIds});
+  closeModal();
+  updateCart();
+  refreshCardActions();
+  animateAdded(productId);
 }
 function closeModal(){document.getElementById('modalRoot').innerHTML=''}
 function updateCart(){
@@ -283,8 +360,8 @@ function openCart(){
 function paintCartLines(){
   var el=document.getElementById('cartLines');if(!el)return;
   el.innerHTML=cart.map(function(x,i){return '<div class="cartline"><div><b>'+esc(x.name)+'</b><div class="mods">'+esc(x.mods.join(' · '))+'</div><div class="qty"><button data-minus="'+i+'">−</button><span>'+x.q+'</span><button data-plus="'+i+'">+</button></div></div><b>'+money(x.unitPrice*x.q)+'</b></div>'}).join('');
-  el.querySelectorAll('[data-plus]').forEach(function(b){b.onclick=function(){cart[+b.dataset.plus].q++;paintCartLines();updateCart();document.getElementById('goPay').textContent=t('Оплатить','Төлеу')+' · '+money(total())}});
-  el.querySelectorAll('[data-minus]').forEach(function(b){b.onclick=function(){var i=+b.dataset.minus;cart[i].q--;if(cart[i].q<=0)cart.splice(i,1);if(!cart.length){closeModal();updateCart();return}paintCartLines();updateCart();document.getElementById('goPay').textContent=t('Оплатить','Төлеу')+' · '+money(total())}});
+  el.querySelectorAll('[data-plus]').forEach(function(b){b.onclick=function(){cart[+b.dataset.plus].q++;paintCartLines();updateCart();refreshCardActions();document.getElementById('goPay').textContent=t('Оплатить','Төлеу')+' · '+money(total())}});
+  el.querySelectorAll('[data-minus]').forEach(function(b){b.onclick=function(){var i=+b.dataset.minus;cart[i].q--;if(cart[i].q<=0)cart.splice(i,1);if(!cart.length){closeModal();updateCart();return}paintCartLines();updateCart();refreshCardActions();document.getElementById('goPay').textContent=t('Оплатить','Төлеу')+' · '+money(total())}});
 }
 function openPay(){
   document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal"><h2>'+t('Способ оплаты','Төлем тәсілі')+'</h2><div class="paygrid"><button class="pay payChoice"><div style="font-size:42px">💳</div><b>ForteBank</b><span>'+t('Банковская карта / Apple Pay','Банк картасы / Apple Pay')+'</span></button><button class="pay payChoice"><div style="font-size:42px">▦</div><b>'+t('Единый QR','Бірыңғай QR')+'</b><span>'+t('QR на сумму заказа','Тапсырыс сомасына QR')+'</span></button></div><div class="actions"><button class="secondary" id="backCart">'+t('Назад','Артқа')+'</button></div></div></div>';
@@ -296,7 +373,7 @@ function showSuccess(){
   var no=Math.floor(100+Math.random()*900);
   document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal center"><div class="success">✓</div><h2>'+t('Заказ принят','Тапсырыс қабылданды')+'</h2><div style="font-size:42px;font-weight:1000;margin:14px">№ '+no+'</div><p class="lead">'+t('Оплата и отправка в iiko пока в тестовом режиме.','Төлем және iiko-ға жіберу әзірге тест режимінде.')+'</p><button class="primary" id="finish" style="width:100%">'+t('Готово','Дайын')+'</button></div></div>';
   enableBackdropClose();
-  document.getElementById('finish').onclick=function(){cart=[];closeModal();updateCart()};
+  document.getElementById('finish').onclick=function(){cart=[];closeModal();updateCart();refreshCardActions()};
 }
 function enableGlobalMenuWheel(){
   document.addEventListener('wheel',function(event){
