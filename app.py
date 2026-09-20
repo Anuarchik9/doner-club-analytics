@@ -25,12 +25,14 @@ DETAIL_WORKERS = max(2, min(int(os.environ.get("IIKO_DETAIL_WORKERS", "8")), 12)
 MAX_ANALYTICS_DAYS = 62
 
 _token_cache = {"value": None, "expires_at": 0.0}
+_kiosk_token_cache = {"value": None, "expires_at": 0.0}
 _products_cache = {"value": None, "last_good": None, "expires_at": 0.0}
 _departments_cache = {"value": None, "expires_at": 0.0}
 _analytics_cache = {}
 _olap_cache = {}
 
 _token_lock = threading.Lock()
+_kiosk_token_lock = threading.Lock()
 _products_lock = threading.Lock()
 _departments_lock = threading.Lock()
 _analytics_lock = threading.Lock()
@@ -81,6 +83,45 @@ def iiko_post(path, payload, timeout=30, retry_auth=True):
     if response.status_code == 401 and retry_auth:
         get_iiko_token(force_refresh=True)
         return iiko_post(path, payload, timeout=timeout, retry_auth=False)
+    return response
+
+
+def get_iiko_kiosk_token(force_refresh=False):
+    if not force_refresh and _cache_valid(_kiosk_token_cache):
+        return _kiosk_token_cache["value"]
+    with _kiosk_token_lock:
+        if not force_refresh and _cache_valid(_kiosk_token_cache):
+            return _kiosk_token_cache["value"]
+        app_id = os.environ.get("IIKO_KIOSK_APP_ID")
+        client_secret = os.environ.get("IIKO_KIOSK_CLIENT_SECRET")
+        api_key = os.environ.get("IIKO_KIOSK_API_KEY")
+        if not all([app_id, client_secret, api_key]):
+            raise RuntimeError("Dedicated iiko Kiosk API credentials are not configured")
+        response = requests.post(
+            f"{IIKO_BASE_URL}/api/v2/access_token",
+            json={"appId": app_id, "clientSecret": client_secret, "apiKey": api_key},
+            timeout=20,
+        )
+        response.raise_for_status()
+        token = response.json()["token"]
+        _kiosk_token_cache["value"] = token
+        _kiosk_token_cache["expires_at"] = time.time() + TOKEN_TTL_SECONDS
+        return token
+
+
+def iiko_kiosk_post(path, payload, timeout=30, retry_auth=True):
+    response = requests.post(
+        f"{IIKO_BASE_URL}{path}",
+        headers={
+            "Authorization": f"Bearer {get_iiko_kiosk_token()}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    if response.status_code == 401 and retry_auth:
+        get_iiko_kiosk_token(force_refresh=True)
+        return iiko_kiosk_post(path, payload, timeout=timeout, retry_auth=False)
     return response
 
 
@@ -1305,6 +1346,17 @@ def kiosk_test_order():
         }), 400
 
     try:
+        if not all([
+            os.environ.get("IIKO_KIOSK_APP_ID"),
+            os.environ.get("IIKO_KIOSK_CLIENT_SECRET"),
+            os.environ.get("IIKO_KIOSK_API_KEY"),
+        ]):
+            return jsonify({
+                "success": False,
+                "code": "KIOSK_API_NOT_CONFIGURED",
+                "message": "Test order was NOT sent. Configure a separate Doner Club Kiosk iikoCloud API integration first.",
+            }), 503
+
         department, available_departments = find_department(point)
         if not department:
             return jsonify({
@@ -1405,11 +1457,10 @@ def kiosk_test_order():
                     "splitBetweenPersons": False,
                 },
                 "comment": "TEST KIOSK — БЕЗ ОПЛАТЫ",
-                "sourceKey": "DonerClubKioskTest",
             },
         }
 
-        response = iiko_post("/api/1/order/create", payload, timeout=45)
+        response = iiko_kiosk_post("/api/1/order/create", payload, timeout=45)
         if not response.ok:
             return jsonify({
                 "success": False,
@@ -1429,7 +1480,7 @@ def kiosk_test_order():
         if correlation_id and order_info.get("creationStatus") == "InProgress":
             for _ in range(6):
                 time.sleep(1)
-                status_response = iiko_post(
+                status_response = iiko_kiosk_post(
                     "/api/1/commands/status",
                     {
                         "organizationId": organization_id,
