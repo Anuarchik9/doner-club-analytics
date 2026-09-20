@@ -1123,6 +1123,325 @@ def receipt_analytics():
 
 
 
+def get_terminal_groups_for_organization(organization_id):
+    response = iiko_post(
+        "/api/1/terminal_groups",
+        {
+            "organizationIds": [organization_id],
+            "includeDisabled": False,
+        },
+        timeout=35,
+    )
+    response.raise_for_status()
+    data = response.json()
+    groups = []
+    for block in data.get("terminalGroups", []) or []:
+        if str(block.get("organizationId")) != str(organization_id):
+            continue
+        for item in block.get("items", []) or []:
+            group_id = item.get("id")
+            if not group_id:
+                continue
+            groups.append({
+                "id": group_id,
+                "name": item.get("name") or "Terminal group",
+                "organizationId": item.get("organizationId") or organization_id,
+            })
+    return groups, data
+
+
+def get_terminal_groups_alive(organization_id, terminal_group_ids):
+    if not terminal_group_ids:
+        return {}
+    response = iiko_post(
+        "/api/1/terminal_groups/is_alive",
+        {
+            "organizationIds": [organization_id],
+            "terminalGroupIds": terminal_group_ids,
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return {
+        str(item.get("terminalGroupId")): bool(item.get("isAlive"))
+        for item in (data.get("isAliveStatus") or [])
+        if item.get("terminalGroupId")
+    }
+
+
+def get_restaurant_sections_for_terminal_groups(terminal_group_ids):
+    if not terminal_group_ids:
+        return [], {}
+    response = iiko_post(
+        "/api/1/reserve/available_restaurant_sections",
+        {
+            "terminalGroupIds": terminal_group_ids,
+            "returnSchema": True,
+            "revision": 0,
+        },
+        timeout=40,
+    )
+    response.raise_for_status()
+    data = response.json()
+    sections = []
+    for section in data.get("restaurantSections", []) or []:
+        section_id = section.get("id")
+        terminal_group_id = section.get("terminalGroupId")
+        section_name = section.get("name") or "Зал"
+        tables = []
+        for table in section.get("tables", []) or []:
+            if table.get("isDeleted"):
+                continue
+            table_id = table.get("id")
+            if not table_id:
+                continue
+            tables.append({
+                "id": table_id,
+                "number": table.get("number"),
+                "name": table.get("name") or "",
+                "seatingCapacity": table.get("seatingCapacity"),
+                "sectionId": section_id,
+                "sectionName": section_name,
+                "terminalGroupId": terminal_group_id,
+            })
+        sections.append({
+            "id": section_id,
+            "name": section_name,
+            "terminalGroupId": terminal_group_id,
+            "tables": tables,
+        })
+    return sections, data
+
+
+@app.route("/kiosk-iiko-config")
+def kiosk_iiko_config():
+    point = request.args.get("point", "Arai").strip()
+    try:
+        department, available_departments = find_department(point)
+        if not department:
+            return jsonify({
+                "success": False,
+                "code": "POINT_NOT_FOUND",
+                "message": f"Point '{point}' not found",
+                "availablePoints": [
+                    {"code": d.get("code"), "name": d.get("name")}
+                    for d in available_departments
+                ],
+            }), 404
+
+        organization_id = department["organizationId"]
+        terminal_groups, _ = get_terminal_groups_for_organization(organization_id)
+        terminal_group_ids = [group["id"] for group in terminal_groups]
+        alive = get_terminal_groups_alive(organization_id, terminal_group_ids)
+        sections, _ = get_restaurant_sections_for_terminal_groups(terminal_group_ids)
+
+        for group in terminal_groups:
+            group["isAlive"] = alive.get(str(group["id"]))
+
+        tables = []
+        for section in sections:
+            tables.extend(section.get("tables") or [])
+
+        response = jsonify({
+            "success": True,
+            "point": {
+                "code": department.get("code"),
+                "name": department.get("name"),
+                "organizationId": organization_id,
+            },
+            "terminalGroups": terminal_groups,
+            "restaurantSections": sections,
+            "tables": tables,
+            "canSendTestOrder": bool(terminal_groups and tables),
+        })
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "code": "IIKO_TIMEOUT",
+            "message": "iiko did not answer in time.",
+        }), 504
+    except requests.HTTPError as error:
+        response = error.response
+        return jsonify({
+            "success": False,
+            "code": "IIKO_HTTP_ERROR",
+            "statusCode": response.status_code if response is not None else None,
+            "details": response.text[:1500] if response is not None else str(error),
+        }), 502
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "code": "KIOSK_IIKO_CONFIG_ERROR",
+            "message": str(error),
+        }), 500
+
+
+@app.route("/kiosk-test-order", methods=["POST"])
+def kiosk_test_order():
+    data = request.get_json(silent=True) or {}
+
+    # Hard safety gate: this endpoint cannot create anything unless the caller
+    # explicitly sends this confirmation value from the final confirmation click.
+    if data.get("confirm") != "SEND_TEST_ORDER":
+        return jsonify({
+            "success": False,
+            "code": "EXPLICIT_CONFIRMATION_REQUIRED",
+            "message": "Test order was NOT sent. Explicit confirmation is required.",
+        }), 400
+
+    point = (data.get("point") or "Arai").strip()
+    terminal_group_id = str(data.get("terminalGroupId") or "").strip()
+    table_id = str(data.get("tableId") or "").strip()
+    incoming_items = data.get("items") or []
+
+    if not terminal_group_id or not table_id or not incoming_items:
+        return jsonify({
+            "success": False,
+            "code": "INVALID_TEST_ORDER",
+            "message": "terminalGroupId, tableId and items are required.",
+        }), 400
+
+    try:
+        department, available_departments = find_department(point)
+        if not department:
+            return jsonify({
+                "success": False,
+                "code": "POINT_NOT_FOUND",
+                "message": f"Point '{point}' not found",
+                "availablePoints": [
+                    {"code": d.get("code"), "name": d.get("name")}
+                    for d in available_departments
+                ],
+            }), 404
+
+        organization_id = department["organizationId"]
+        terminal_groups, _ = get_terminal_groups_for_organization(organization_id)
+        allowed_group_ids = {str(group["id"]) for group in terminal_groups}
+        if terminal_group_id not in allowed_group_ids:
+            return jsonify({
+                "success": False,
+                "code": "INVALID_TERMINAL_GROUP",
+                "message": "Selected terminal group does not belong to Arai.",
+            }), 400
+
+        sections, _ = get_restaurant_sections_for_terminal_groups([terminal_group_id])
+        allowed_table_ids = {
+            str(table.get("id"))
+            for section in sections
+            for table in (section.get("tables") or [])
+            if table.get("id")
+        }
+        if table_id not in allowed_table_ids:
+            return jsonify({
+                "success": False,
+                "code": "INVALID_TABLE",
+                "message": "Selected table is not available for this terminal group.",
+            }), 400
+
+        order_items = []
+        for source_item in incoming_items:
+            product_id = str(source_item.get("productId") or "").strip()
+            if not product_id:
+                continue
+            try:
+                amount = float(source_item.get("amount") or 0)
+            except (TypeError, ValueError):
+                amount = 0
+            if amount <= 0:
+                continue
+
+            order_item = {
+                "productId": product_id,
+                "type": "Product",
+                "amount": amount,
+            }
+            product_size_id = source_item.get("productSizeId")
+            if product_size_id:
+                order_item["productSizeId"] = str(product_size_id)
+
+            modifiers = []
+            for modifier in source_item.get("modifiers") or []:
+                modifier_product_id = str(modifier.get("productId") or "").strip()
+                if not modifier_product_id:
+                    continue
+                modifier_payload = {
+                    "productId": modifier_product_id,
+                    "amount": float(modifier.get("amount") or 1),
+                }
+                product_group_id = modifier.get("productGroupId")
+                if product_group_id:
+                    modifier_payload["productGroupId"] = str(product_group_id)
+                modifiers.append(modifier_payload)
+            if modifiers:
+                order_item["modifiers"] = modifiers
+
+            order_items.append(order_item)
+
+        if not order_items:
+            return jsonify({
+                "success": False,
+                "code": "NO_VALID_ITEMS",
+                "message": "No valid order items were supplied.",
+            }), 400
+
+        payload = {
+            "organizationId": organization_id,
+            "terminalGroupId": terminal_group_id,
+            "order": {
+                "tableIds": [table_id],
+                "items": order_items,
+                "guests": {
+                    "count": 1,
+                    "splitBetweenPersons": False,
+                },
+                "comment": "TEST KIOSK — БЕЗ ОПЛАТЫ",
+                "sourceKey": "DonerClubKioskTest",
+            },
+        }
+
+        response = iiko_post("/api/1/order/create", payload, timeout=45)
+        if not response.ok:
+            return jsonify({
+                "success": False,
+                "code": "IIKO_ORDER_CREATE_FAILED",
+                "statusCode": response.status_code,
+                "details": response.text[:2500],
+            }), 502
+
+        result = response.json()
+        return jsonify({
+            "success": True,
+            "message": "Test order request was sent to iiko.",
+            "organizationId": organization_id,
+            "terminalGroupId": terminal_group_id,
+            "tableId": table_id,
+            "iiko": result,
+        })
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "code": "IIKO_TIMEOUT",
+            "message": "iiko did not answer in time.",
+        }), 504
+    except requests.HTTPError as error:
+        response = error.response
+        return jsonify({
+            "success": False,
+            "code": "IIKO_HTTP_ERROR",
+            "statusCode": response.status_code if response is not None else None,
+            "details": response.text[:2500] if response is not None else str(error),
+        }), 502
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "code": "KIOSK_TEST_ORDER_ERROR",
+            "message": str(error),
+        }), 500
+
+
 @app.route("/kiosk-menu")
 def kiosk_menu():
     point = request.args.get("point", "Arai").strip()
