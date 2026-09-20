@@ -11,7 +11,7 @@
 :root{--o:#ff5a12;--ink:#111;--muted:#746d66;--bg:#f6f3ef;--line:#e7dfd8;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",Arial,sans-serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink)}body{overflow:hidden}button{font:inherit;border:0;cursor:pointer}
 #app{height:100%;display:flex;flex-direction:column}.top{height:72px;flex:0 0 72px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:10px;z-index:10}
-.brand{display:flex;align-items:center;gap:10px;font-size:23px;font-weight:1000}.mark{width:44px;height:44px;border-radius:13px;background:var(--o);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:1000}.pointBadge{margin-left:4px;padding:8px 12px;border-radius:12px;background:#fff3ec;border:1px solid #ffd8c4;color:var(--o);font-size:13px;font-weight:1000;white-space:nowrap}.status{display:none!important}
+.brand{display:flex;align-items:center;gap:10px;font-size:23px;font-weight:1000}.mark{width:44px;height:44px;border-radius:13px;background:var(--o);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:1000}.pointBadge{margin-left:4px;padding:8px 12px;border-radius:12px;background:#fff3ec;border:1px solid #ffd8c4;color:var(--o);font-size:13px;font-weight:1000;white-space:nowrap;user-select:none;-webkit-user-select:none}.pointBadge.pushing{animation:pointPush .8s ease infinite}@keyframes pointPush{0%,100%{transform:scale(1);box-shadow:0 0 0 rgba(255,90,18,0)}50%{transform:scale(1.04);box-shadow:0 0 0 6px rgba(255,90,18,.08)}}.status{display:none!important}
 .langs{margin-left:auto;display:flex;background:#f1eeea;border-radius:12px;padding:3px}.langs button{padding:8px 10px;background:transparent;border-radius:9px;font-size:12px;font-weight:950;color:#777}.langs .on{background:#fff;color:var(--o);box-shadow:0 2px 8px #0001}
 .carthead{height:42px;background:#161616;color:#fff;border-radius:12px;padding:0 14px;font-weight:950}.cats{display:flex;gap:8px;padding:12px 20px 9px;overflow-x:auto;scrollbar-width:none}.cats::-webkit-scrollbar{display:none}.cat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;font-weight:950;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease,transform .12s ease}.cat:active{transform:scale(.97)}.cat.on{background:var(--o);border-color:var(--o);color:#fff}
 .content{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 22px 112px;width:100%;max-width:none;margin:0;scroll-behavior:smooth;scrollbar-width:auto;scrollbar-color:#9c9c9c #f3f0ec}.content::-webkit-scrollbar{width:14px}.content::-webkit-scrollbar-track{background:#f3f0ec}.content::-webkit-scrollbar-thumb{background:#9c9c9c;border-radius:10px;border:3px solid #f3f0ec}.content::-webkit-scrollbar-thumb:hover{background:#7f7f7f}.content>.titleRow,.content>#setup,.content>#grid{width:100%;max-width:1040px;margin-left:auto;margin-right:auto}.titleRow{display:flex;align-items:flex-end;justify-content:space-between;margin:4px 0 14px}.titleRow h1{font-size:30px;margin:0}.hint{font-size:12px;font-weight:850;color:var(--muted)}
@@ -27,7 +27,7 @@
 <div id="app">
   <div class="top">
     <div class="brand"><div class="mark">DC</div>DONER CLUB</div>
-    <div class="pointBadge">Арай</div>
+    <div id="pointBadge" class="pointBadge" title="Удерживайте для обновления меню">Арай</div>
     <div id="status" class="status" aria-hidden="true"></div>
     <div class="langs"><button id="kzBtn">ҚАЗ</button><button id="ruBtn" class="on">РУС</button></div>
     <button id="cartHead" class="carthead">Корзина · 0</button>
@@ -58,6 +58,46 @@ function count(){return cart.reduce(function(s,x){return s+x.q},0)}
 function total(){return cart.reduce(function(s,x){return s+x.q*x.unitPrice},0)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})}
 
+function pushMenuNow(){
+  try{localStorage.removeItem(MENU_CACHE_KEY)}catch(e){}
+  var badge=document.getElementById('pointBadge');
+  if(badge){
+    badge.classList.add('pushing');
+    badge.textContent=t('Арай · обновление','Арай · жаңарту');
+  }
+  loadMenu(true).finally(function(){
+    if(badge){
+      badge.classList.remove('pushing');
+      badge.textContent='Арай';
+    }
+  });
+}
+function enableMenuPushGesture(){
+  var badge=document.getElementById('pointBadge');
+  if(!badge)return;
+
+  var timer=null;
+  var cancel=function(){
+    if(timer){clearTimeout(timer);timer=null;}
+  };
+
+  badge.addEventListener('pointerdown',function(event){
+    cancel();
+    timer=setTimeout(function(){
+      timer=null;
+      pushMenuNow();
+    },1100);
+  });
+  badge.addEventListener('pointerup',cancel);
+  badge.addEventListener('pointercancel',cancel);
+  badge.addEventListener('pointerleave',cancel);
+
+  // Desktop shortcut: double-click the location badge.
+  badge.addEventListener('dblclick',function(event){
+    event.preventDefault();
+    pushMenuNow();
+  });
+}
 function readMenuCache(){
   try{
     var raw=localStorage.getItem(MENU_CACHE_KEY);
@@ -441,6 +481,18 @@ function showSuccess(){
   enableBackdropClose();
   document.getElementById('finish').onclick=function(){cart=[];closeModal();updateCart();refreshCardActions()};
 }
+function handlePushQuery(){
+  try{
+    var url=new URL(window.location.href);
+    if(url.searchParams.get('push')==='1'){
+      url.searchParams.delete('push');
+      history.replaceState(null,'',url.pathname+(url.searchParams.toString()?'?'+url.searchParams.toString():'')+url.hash);
+      setTimeout(pushMenuNow,50);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
 function enableGlobalMenuWheel(){
   document.addEventListener('wheel',function(event){
     if(event.ctrlKey)return;
@@ -458,11 +510,13 @@ function enableGlobalMenuWheel(){
   },{passive:false});
 }
 enableGlobalMenuWheel();
+enableMenuPushGesture();
+var pushedOnOpen=handlePushQuery();
 document.getElementById('ruBtn').onclick=function(){lang='ru';paint()};
 document.getElementById('kzBtn').onclick=function(){lang='kz';paint()};
 document.getElementById('cartHead').onclick=openCart;
 document.getElementById('checkout').onclick=openCart;
 
-paint();loadMenu();
+paint();if(!pushedOnOpen)loadMenu();
 </script>
 </body></html>
