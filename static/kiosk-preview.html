@@ -4,94 +4,172 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Doner Club Kiosk Preview</title>
+<title>Doner Club Kiosk</title>
 <style>
-:root{--o:#ff5a12;--ink:#111;--muted:#746d66;--bg:#f6f3ef;--card:#fff;--line:#e7dfd8;--green:#5a9d42;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",Arial,sans-serif}
+:root{--o:#ff5a12;--ink:#111;--muted:#746d66;--bg:#f6f3ef;--line:#e7dfd8;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",Arial,sans-serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink)}body{overflow:hidden}button{font:inherit;border:0;cursor:pointer}
 #app{height:100%;display:flex;flex-direction:column}.top{height:72px;flex:0 0 72px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:10px;z-index:10}
 .brand{display:flex;align-items:center;gap:10px;font-size:23px;font-weight:1000}.mark{width:44px;height:44px;border-radius:13px;background:var(--o);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:1000}
-.status{margin-left:auto;background:#f3f0ec;border-radius:13px;padding:9px 12px;font-size:12px;font-weight:900;color:#675f58;white-space:nowrap}.langs{display:flex;background:#f1eeea;border-radius:12px;padding:3px}.langs button{padding:8px 10px;background:transparent;border-radius:9px;font-size:12px;font-weight:950;color:#777}.langs .on{background:#fff;color:var(--o);box-shadow:0 2px 8px #0001}
-.carthead{height:42px;background:#161616;color:#fff;border-radius:12px;padding:0 14px;font-weight:950}.cats{display:flex;gap:8px;padding:12px 20px 9px;overflow-x:auto;background:var(--bg);scrollbar-width:none}.cats::-webkit-scrollbar{display:none}.cat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;font-weight:950;white-space:nowrap}.cat.on{background:var(--o);border-color:var(--o);color:#fff}
+.status{margin-left:auto;background:#f3f0ec;border-radius:13px;padding:9px 12px;font-size:12px;font-weight:900;color:#675f58;white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}.status.ok{background:#edf7e9;color:#39782d}.status.err{background:#fff0ec;color:#a9472e}
+.langs{display:flex;background:#f1eeea;border-radius:12px;padding:3px}.langs button{padding:8px 10px;background:transparent;border-radius:9px;font-size:12px;font-weight:950;color:#777}.langs .on{background:#fff;color:var(--o);box-shadow:0 2px 8px #0001}
+.carthead{height:42px;background:#161616;color:#fff;border-radius:12px;padding:0 14px;font-weight:950}.cats{display:flex;gap:8px;padding:12px 20px 9px;overflow-x:auto;scrollbar-width:none}.cats::-webkit-scrollbar{display:none}.cat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;font-weight:950;white-space:nowrap}.cat.on{background:var(--o);border-color:var(--o);color:#fff}
 .content{flex:1;overflow:auto;padding:10px 20px 112px}.titleRow{display:flex;align-items:flex-end;justify-content:space-between;margin:4px 0 14px}.titleRow h1{font-size:30px;margin:0}.hint{font-size:12px;font-weight:850;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{background:#fff;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 7px 20px #4f3e2e0a;animation:cardIn .18s ease both}.photo{height:180px;background:#ddd;overflow:hidden}.photo img{width:100%;height:100%;object-fit:cover;display:block}.body{padding:14px;min-height:144px;display:flex;flex-direction:column}.name{font-size:17px;font-weight:1000;line-height:1.08}.weight{font-size:11px;color:#777;font-weight:850}.desc{font-size:12px;color:var(--muted);line-height:1.35;margin-top:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.bottom{margin-top:auto;display:flex;align-items:end;justify-content:space-between;gap:8px}.price{font-size:22px;font-weight:1000}.price small{display:block;font-size:9px;color:#777;margin-top:3px}.add{width:46px;height:46px;border-radius:15px;background:var(--o);color:#fff;font-size:28px;font-weight:900}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{background:#fff;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 7px 20px #4f3e2e0a}.photo{height:190px;background:#eee;overflow:hidden;position:relative}.photo img{width:100%;height:100%;object-fit:cover;display:block}.placeholder{width:100%;height:100%;display:grid;place-items:center;background:linear-gradient(135deg,#ff6a24,#ff954f);color:white;font-size:38px;font-weight:1000}
+.body{padding:14px;min-height:145px;display:flex;flex-direction:column}.name{font-size:17px;font-weight:1000;line-height:1.08}.weight{font-size:11px;color:#777;font-weight:850}.desc{font-size:12px;color:var(--muted);line-height:1.35;margin-top:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.bottom{margin-top:auto;display:flex;align-items:end;justify-content:space-between;gap:8px}.price{font-size:22px;font-weight:1000}.price small{display:block;font-size:9px;color:#777;margin-top:3px}.add{width:46px;height:46px;border-radius:15px;background:var(--o);color:#fff;font-size:28px;font-weight:900}
+.empty{grid-column:1/-1;background:#fff;border:1px solid var(--line);border-radius:24px;padding:36px;text-align:center;color:#756e68}.empty b{display:block;color:#111;font-size:21px;margin-bottom:8px}
 .orderbar{position:fixed;left:16px;right:16px;bottom:14px;height:76px;background:#151515;color:#fff;border-radius:22px;display:flex;align-items:center;padding:10px 14px 10px 18px;gap:14px;box-shadow:0 18px 45px #0003;z-index:15}.sumwrap{min-width:155px}.count{font-size:11px;color:#aaa;font-weight:800}.sum{font-size:23px;font-weight:1000}.items{flex:1;color:#c8c8c8;font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.checkout{height:52px;border-radius:16px;padding:0 22px;background:var(--o);color:#fff;font-weight:1000}.checkout:disabled{opacity:.4}
-.overlay{position:fixed;inset:0;background:#0008;z-index:30;display:grid;place-items:center;padding:20px;animation:shade .15s ease}.modal{width:min(720px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:30px;padding:26px;animation:modal .18s cubic-bezier(.2,.7,.2,1)}.modal h2{font-size:30px;margin:0 0 8px}.lead{margin:0 0 18px;color:var(--muted);line-height:1.4}.section{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:#888;font-weight:950;margin:18px 0 8px}.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:16px;padding:13px 14px;margin:8px 0}.opt input{width:22px;height:22px;accent-color:var(--o)}.optmain{flex:1}.optn{font-weight:950}.optnote{font-size:11px;color:#888;margin-top:2px}.tag{font-size:12px;font-weight:950;color:#333}.actions{display:flex;gap:12px;margin-top:20px}.secondary,.primary{height:54px;border-radius:16px;font-weight:1000}.secondary{flex:1;background:#f2efeb}.primary{flex:1.5;background:var(--o);color:#fff}.cartline{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #eee}.mods{font-size:11px;color:#777;margin-top:4px}.qty{display:inline-flex;align-items:center;border:1px solid #ddd;border-radius:11px;overflow:hidden;margin-top:8px}.qty button{width:34px;height:32px;background:#f4f1ed;font-weight:1000}.qty span{width:34px;text-align:center;font-weight:900}.paygrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pay{padding:20px;border:1px solid var(--line);border-radius:20px;background:#fff;text-align:left}.pay b{display:block;font-size:19px;margin:8px 0}.pay span{font-size:12px;color:#777}.success{width:78px;height:78px;border-radius:50%;margin:0 auto 14px;background:#e8f5e4;color:#4b9538;display:grid;place-items:center;font-size:44px;font-weight:1000}.center{text-align:center}.fine{font-size:11px;color:#888}.notice{background:#fff7e7;border:1px solid #f1d79d;border-radius:15px;padding:11px 13px;font-size:12px;color:#6c5726;margin-bottom:14px}
-@keyframes cardIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}@keyframes shade{from{opacity:0}to{opacity:1}}@keyframes modal{from{opacity:0;transform:translateY(14px) scale(.99)}to{opacity:1;transform:none}}
+.overlay{position:fixed;inset:0;background:#0008;z-index:30;display:grid;place-items:center;padding:20px}.modal{width:min(760px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:30px;padding:26px}.modal h2{font-size:30px;margin:0 0 8px}.lead{margin:0 0 18px;color:var(--muted);line-height:1.4}.section{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:#888;font-weight:950;margin:18px 0 8px}.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:16px;padding:13px 14px;margin:8px 0}.opt input{width:22px;height:22px;accent-color:var(--o)}.optmain{flex:1}.optn{font-weight:950}.optnote{font-size:11px;color:#888;margin-top:2px}.tag{font-size:12px;font-weight:950;color:#333}.actions{display:flex;gap:12px;margin-top:20px}.secondary,.primary{height:54px;border-radius:16px;font-weight:1000}.secondary{flex:1;background:#f2efeb}.primary{flex:1.5;background:var(--o);color:#fff}.cartline{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #eee}.mods{font-size:11px;color:#777;margin-top:4px}.qty{display:inline-flex;align-items:center;border:1px solid #ddd;border-radius:11px;overflow:hidden;margin-top:8px}.qty button{width:34px;height:32px;background:#f4f1ed;font-weight:1000}.qty span{width:34px;text-align:center;font-weight:900}.paygrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pay{padding:20px;border:1px solid var(--line);border-radius:20px;background:#fff;text-align:left}.pay b{display:block;font-size:19px;margin:8px 0}.pay span{font-size:12px;color:#777}.success{width:78px;height:78px;border-radius:50%;margin:0 auto 14px;background:#e8f5e4;color:#4b9538;display:grid;place-items:center;font-size:44px;font-weight:1000}.center{text-align:center}.setup{background:#fff7e7;border:1px solid #f1d79d;border-radius:15px;padding:13px 15px;margin-bottom:14px;color:#6c5726;font-size:12px;line-height:1.45}
 @media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.status{display:none}}@media(max-width:650px){.grid{grid-template-columns:1fr}.photo{height:210px}.items{display:none}.orderbar{left:8px;right:8px}.checkout{padding:0 14px}}
 </style>
 </head>
-<body><div id="app"></div>
+<body>
+<div id="app">
+  <div class="top">
+    <div class="brand"><div class="mark">DC</div>DONER CLUB</div>
+    <div id="status" class="status">Kiosk Арай · загружаю iiko…</div>
+    <div class="langs"><button id="kzBtn">ҚАЗ</button><button id="ruBtn" class="on">РУС</button></div>
+    <button id="cartHead" class="carthead">Корзина · 0</button>
+  </div>
+  <div id="cats" class="cats"></div>
+  <div class="content">
+    <div class="titleRow"><h1 id="title">Kiosk Арай</h1><div id="hint" class="hint">Внешнее меню iiko · Арай</div></div>
+    <div id="setup"></div>
+    <div id="grid" class="grid"><div class="empty"><b>Загружаю меню…</b>Получаю категории, блюда, цены и фотографии из iiko.</div></div>
+  </div>
+  <div class="orderbar">
+    <div class="sumwrap"><div id="count" class="count">Корзина пуста</div><div id="sum" class="sum">0 ₸</div></div>
+    <div id="cartItems" class="items">Выберите блюда из меню</div>
+    <button id="checkout" class="checkout" disabled>Оформить заказ · 0 ₸</button>
+  </div>
+</div>
+<div id="modalRoot"></div>
 <script>
-var O='https://raw.githubusercontent.com/Anuarchik9/doner-club-brand/main/dist/assets/';
-var I={
-doner1:O+'product-cover.webp',
-doner2:O+'interactive/doner-exploded.webp',
-doner3:O+'interactive/tunnel-doner-hands.webp',
-doner4:O+'new/doner-sizes.webp',
-doner5:O+'new/website-doners.webp',
-promo:O+'new/website-promos.webp',
-drinks:O+'new/website-drinks.webp',
-extra:O+'interactive/lavash-texture.webp'
-};
-var products=[
-{id:'go',cat:'promo',ru:'Go! Combo',kz:'Go! Combo',img:I.promo,price:4030,doner:false},
-{id:'birge',cat:'promo',ru:'Комбо «Бірге Je»',kz:'«Бірге Je» комбо',img:I.promo,price:7130,doner:false},
-{id:'mini-ch',cat:'doner',ru:'Донер Mini Куриный',kz:'Mini Тауық донері',w:'255 г',img:I.doner1,price:2300,doner:true},
-{id:'mini-beef',cat:'doner',ru:'Донер Mini Говяжий',kz:'Mini Сиыр еті донері',w:'255 г',img:I.doner2,price:2400,doner:true},
-{id:'std-ch',cat:'doner',ru:'Донер Стандарт Куриный',kz:'Стандарт Тауық донері',w:'390 г',img:I.doner3,price:2650,doner:true},
-{id:'std-beef',cat:'doner',ru:'Донер Стандарт Говяжий',kz:'Стандарт Сиыр еті донері',w:'390 г',img:I.doner4,price:2890,doner:true},
-{id:'x2-ch',cat:'doner',ru:'Донер х2 Куриный',kz:'х2 Тауық донері',w:'515 г',img:I.doner5,price:3200,doner:true},
-{id:'x2-beef',cat:'doner',ru:'Донер х2 Говяжий',kz:'х2 Сиыр еті донері',w:'515 г',img:I.doner2,price:3490,doner:true},
-{id:'baton-ch',cat:'baton',ru:'Батон Куриный',kz:'Тауық еті бар батон',w:'385 г',img:I.doner3,price:2700,doner:true},
-{id:'baton-beef',cat:'baton',ru:'Батон Говяжий',kz:'Сиыр еті бар батон',w:'385 г',img:I.doner4,price:2900,doner:true},
-{id:'baton-mix',cat:'baton',ru:'Батон Ассорти',kz:'Ассорти батон',w:'385 г',img:I.doner5,price:2800,doner:true},
-{id:'fries',cat:'fries',ru:'Картофель фри',kz:'Картоп фри',w:'100 г',img:I.doner1,price:700,doner:false},
-{id:'strips',cat:'strips',ru:'Стрипсы Фирменные',kz:'Фирмалық стрипстер',w:'130 г',img:I.doner2,price:1200,doner:false},
-{id:'ava',cat:'drinks',ru:'Ava в ассортименте',kz:'Ava ассортиментте',w:'0,45 л',img:I.drinks,price:890,doner:false},
-{id:'ayran',cat:'drinks',ru:'Dala ayran',kz:'Dala ayran',w:'300 г',img:I.drinks,price:700,doner:false},
-{id:'pepsi',cat:'drinks',ru:'Pepsi',kz:'Pepsi',w:'0,5 л',img:I.drinks,price:890,doner:false},
-{id:'water',cat:'drinks',ru:'ASU',kz:'ASU',w:'0,5 л',img:I.drinks,price:700,doner:false},
-{id:'garlic',cat:'extra',ru:'Чесночный соус',kz:'Сарымсақ соусы',w:'30 г',img:I.extra,price:250,doner:false},
-{id:'jal',cat:'extra',ru:'Халапеньо отдельно',kz:'Халапеньо бөлек',img:I.extra,price:250,doner:false}
-];
-var lang='ru',cat='doner',cart=[],selected=null,modal=null,orderNo=null;
-var cats=[['promo','Акции','Науқандар'],['doner','Донеры','Донерлер'],['baton','Батоны','Батондар'],['fries','Фри','Фри'],['strips','Стрипсы','Стрипстер'],['drinks','Напитки','Сусындар'],['extra','Дополнительно','Қосымша']];
-function t(ru,kz){return lang==='ru'?ru:kz}function money(n){return n.toLocaleString('ru-RU')+' ₸'}function cnt(){return cart.reduce(function(s,x){return s+x.q},0)}function total(){return cart.reduce(function(s,x){return s+x.q*x.p},0)}
-function desc(p){if(p.cat==='doner')return t('Лаваш, мясо, картофель фри, малосольные огурцы, красный и белый соусы.','Лаваш, ет, картоп фри, аз тұздалған қияр, қызыл және ақ соустар.');if(p.cat==='baton')return t('Батон, мясо, картофель фри, огурцы и фирменные соусы.','Батон, ет, картоп фри, қияр және фирмалық соустар.');return ''}
-function addLine(p,mods,extra){var id=p.id+'|'+mods.join('|');var x=cart.find(function(z){return z.id===id});if(x)x.q++;else cart.push({id:id,name:lang==='ru'?p.ru:p.kz,p:p.price+extra,q:1,mods:mods});modal=null;render()}
-function render(){
-var title=cats.find(function(x){return x[0]===cat});var list=products.filter(function(p){return p.cat===cat});
-var h='<div class="top"><div class="brand"><div class="mark">DC</div>DONER CLUB</div><div class="status">PREVIEW · источник цен будет внешнее меню iiko</div><div class="langs"><button class="'+(lang==='kz'?'on':'')+'" data-lang="kz">ҚАЗ</button><button class="'+(lang==='ru'?'on':'')+'" data-lang="ru">РУС</button></div><button class="carthead" data-cart>'+t('Корзина','Себет')+' · '+cnt()+'</button></div>';
-h+='<div class="cats">'+cats.map(function(x){return '<button class="cat '+(cat===x[0]?'on':'')+'" data-cat="'+x[0]+'">'+(lang==='ru'?x[1]:x[2])+'</button>'}).join('')+'</div>';
-h+='<div class="content"><div class="titleRow"><h1>'+(lang==='ru'?title[1]:title[2])+'</h1><div class="hint">'+t('Интерфейс терминала · iPad Air','Терминал интерфейсі · iPad Air')+'</div></div><div class="notice">'+t('Сейчас цены в превью временные. После создания отдельного внешнего меню iiko здесь будут только его категории, фото и цены.','Қазір preview бағалары уақытша. Жеке iiko сыртқы мәзірін жасағаннан кейін мұнда тек сол мәзірдің санаттары, фотолары және бағалары болады.')+'</div><div class="grid">';
-h+=list.map(function(p){return '<article class="card"><div class="photo"><img src="'+p.img+'" alt=""></div><div class="body"><div class="name">'+(lang==='ru'?p.ru:p.kz)+' <span class="weight">'+(p.w||'')+'</span></div><div class="desc">'+desc(p)+'</div><div class="bottom"><div class="price">'+money(p.price)+'<small>'+t('временно · до внешнего меню','уақытша · сыртқы мәзірге дейін')+'</small></div><button class="add" data-add="'+p.id+'">+</button></div></div></article>'}).join('');
-h+='</div></div><div class="orderbar"><div class="sumwrap"><div class="count">'+(cnt()?cnt()+' '+t('поз.','поз.') : t('Корзина пуста','Себет бос'))+'</div><div class="sum">'+money(total())+'</div></div><div class="items">'+cart.slice(0,3).map(function(x){return x.name+' ×'+x.q}).join(' · ')+'</div><button class="checkout" data-check '+(!cart.length?'disabled':'')+'>'+t('Оформить заказ','Тапсырысты рәсімдеу')+' · '+money(total())+'</button></div>';
-if(modal==='product')h+=productModal(selected);if(modal==='cart')h+=cartModal();if(modal==='pay')h+=payModal();if(modal==='success')h+=successModal();
-document.getElementById('app').innerHTML=h;bind()
+var lang='ru', categories=[], products=[], activeCat=null, cart=[], selected=null, menuReady=false;
+var CAT_KZ={'Комбо':'Комбо','Донер':'Донерлер','Донеры':'Донерлер','Бар':'Сусындар','Напитки':'Сусындар','Чаи':'Шай','Сладости':'Тәттілер','Дополнительное':'Қосымша','Дополнительно':'Қосымша','Батоны':'Батондар','Фри':'Фри','Стрипсы':'Стрипстер','Акции':'Науқандар'};
+function t(ru,kz){return lang==='ru'?ru:kz}
+function money(n){return Number(n||0).toLocaleString('ru-RU')+' ₸'}
+function categoryName(c){return lang==='ru'?c.name:(CAT_KZ[c.name]||c.name)}
+function productName(p){return p.name}
+function count(){return cart.reduce(function(s,x){return s+x.q},0)}
+function total(){return cart.reduce(function(s,x){return s+x.q*x.unitPrice},0)}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})}
+
+async function loadMenu(){
+  var status=document.getElementById('status');
+  status.className='status';
+  status.textContent='Kiosk Арай · загружаю iiko…';
+  try{
+    var r=await fetch('/kiosk-menu?point=Arai&menu='+encodeURIComponent('Kiosk Арай')+'&_='+Date.now(),{cache:'no-store'});
+    var data=await r.json();
+    if(!r.ok||!data.success) throw data;
+    categories=data.categories||[];
+    products=data.products||[];
+    activeCat=categories[0]&&categories[0].id;
+    menuReady=true;
+    status.className='status ok';
+    status.textContent='Kiosk Арай · iiko · '+products.length+' поз.';
+    document.getElementById('setup').innerHTML='';
+    paint();
+  }catch(e){
+    menuReady=false;
+    status.className='status err';
+    status.textContent='Kiosk Арай · не доступно через API';
+    var names=(e&&e.availableMenus||[]).map(function(x){return x.name}).filter(Boolean);
+    document.getElementById('setup').innerHTML='<div class="setup"><b>'+t('Меню создано, но iikoCloud пока его не отдаёт терминалу.','Мәзір жасалды, бірақ iikoCloud оны терминалға әлі бермейді.')+'</b><br>'+t('В iikoWeb для ресторана Арай нужно назначить внешнее меню «Kiosk Арай» и сделать его активным.','iikoWeb ішінде Арай мейрамханасына «Kiosk Арай» сыртқы мәзірін тағайындап, оны белсенді ету керек.')+(names.length?'<br><br>'+t('Сейчас API видит: ','API қазір көреді: ')+esc(names.join(', ')):'')+'</div>';
+    categories=[];products=[];paint();
+  }
 }
-function productModal(p){
-var base='<div class="overlay"><div class="modal"><h2>'+(lang==='ru'?p.ru:p.kz)+'</h2><p class="lead">'+desc(p)+'</p>';
-if(p.doner){base+='<div class="section">'+t('Состав','Құрамы')+'</div>'+opt('white',t('Белый соус','Ақ соус'),true)+opt('red',t('Фирменный красный соус','Фирмалық қызыл соус'),true)+opt('fries',t('Картофель фри внутри','Ішіндегі картоп фри'),true)+opt('pickles',t('Малосольные огурцы','Аз тұздалған қияр'),true)+'<div class="section">'+t('Добавить внутрь','Ішіне қосу')+'</div>'+opt('jal',t('Халапеньо внутрь донера','Донер ішіне халапеньо'),false,'+0 ₸')+opt('cheese',t('Дополнительный сыр','Қосымша ірімшік'),false,'+200 ₸');}
-base+='<div class="actions"><button class="secondary" data-close>'+t('Назад','Артқа')+'</button><button class="primary" data-confirm>'+t('Добавить','Қосу')+' · '+money(p.price)+'</button></div></div></div>';return base}
-function opt(id,name,checked,tag){return '<label class="opt"><input id="'+id+'" type="checkbox" '+(checked?'checked':'')+'><div class="optmain"><div class="optn">'+name+'</div></div><div class="tag">'+(tag||t('В составе','Құрамында'))+'</div></label>'}
-function cartModal(){return '<div class="overlay"><div class="modal"><h2>'+t('Ваш заказ','Сіздің тапсырысыңыз')+'</h2>'+cart.map(function(x){return '<div class="cartline"><div><b>'+x.name+'</b><div class="mods">'+x.mods.join(' · ')+'</div><div class="qty"><button data-minus="'+x.id+'">−</button><span>'+x.q+'</span><button data-plus="'+x.id+'">+</button></div></div><b>'+money(x.p*x.q)+'</b></div>'}).join('')+'<div class="actions"><button class="secondary" data-close>'+t('Продолжить выбор','Таңдауды жалғастыру')+'</button><button class="primary" data-pay>'+t('Оплатить','Төлеу')+' · '+money(total())+'</button></div></div></div>'}
-function payModal(){return '<div class="overlay"><div class="modal"><h2>'+t('Способ оплаты','Төлем тәсілі')+'</h2><div class="paygrid"><button class="pay" data-paid><div style="font-size:42px">💳</div><b>ForteBank</b><span>'+t('Банковская карта / Apple Pay','Банк картасы / Apple Pay')+'</span></button><button class="pay" data-paid><div style="font-size:42px">▦</div><b>'+t('Единый QR','Бірыңғай QR')+'</b><span>'+t('QR на сумму заказа','Тапсырыс сомасына QR')+'</span></button></div><div class="actions"><button class="secondary" data-close>'+t('Назад','Артқа')+'</button></div></div></div>'}
-function successModal(){return '<div class="overlay"><div class="modal center"><div class="success">✓</div><h2>'+t('Заказ принят','Тапсырыс қабылданды')+'</h2><div style="font-size:42px;font-weight:1000;margin:14px">№ '+orderNo+'</div><p class="lead">'+t('После реального подключения заказ уйдёт в iiko и на кухонный Xprinter XP-A160M.','Нақты қосылғаннан кейін тапсырыс iiko-ға және ас үйдегі Xprinter XP-A160M принтеріне жіберіледі.')+'</p><button class="primary" data-finish style="width:100%">'+t('Готово','Дайын')+'</button></div></div>'}
-function bind(){
-document.querySelectorAll('[data-lang]').forEach(function(b){b.onclick=function(){lang=b.dataset.lang;render()}});
-document.querySelectorAll('[data-cat]').forEach(function(b){b.onclick=function(){cat=b.dataset.cat;render()}});
-document.querySelectorAll('[data-add]').forEach(function(b){b.onclick=function(){selected=products.find(function(p){return p.id===b.dataset.add});modal='product';render()}});
-document.querySelectorAll('[data-close]').forEach(function(b){b.onclick=function(){modal=null;render()}});
-document.querySelector('[data-cart]')&& (document.querySelector('[data-cart]').onclick=function(){if(cart.length){modal='cart';render()}});
-document.querySelector('[data-check]')&& (document.querySelector('[data-check]').onclick=function(){if(cart.length){modal='cart';render()}});
-document.querySelector('[data-confirm]')&& (document.querySelector('[data-confirm]').onclick=function(){var mods=[],extra=0;if(selected.doner){if(!document.getElementById('white').checked)mods.push(t('без белого соуса','ақ соуссыз'));if(!document.getElementById('red').checked)mods.push(t('без красного соуса','қызыл соуссыз'));if(!document.getElementById('fries').checked)mods.push(t('без картофеля фри','картоп фрисіз'));if(!document.getElementById('pickles').checked)mods.push(t('без огурцов','қиярсыз'));if(document.getElementById('jal').checked)mods.push(t('халапеньо внутрь','халапеньо ішіне'));if(document.getElementById('cheese').checked){mods.push(t('доп. сыр +200','қос. ірімшік +200'));extra=200}}addLine(selected,mods,extra)});
-var ch=document.getElementById('cheese');if(ch)ch.onchange=function(){var b=document.querySelector('[data-confirm]');if(b)b.textContent=t('Добавить','Қосу')+' · '+money(selected.price+(ch.checked?200:0))};
-document.querySelectorAll('[data-plus]').forEach(function(b){b.onclick=function(){cart.find(function(x){return x.id===b.dataset.plus}).q++;render()}});
-document.querySelectorAll('[data-minus]').forEach(function(b){b.onclick=function(){var x=cart.find(function(z){return z.id===b.dataset.minus});x.q--;if(x.q<=0)cart=cart.filter(function(z){return z.id!==x.id});render()}});
-document.querySelector('[data-pay]')&& (document.querySelector('[data-pay]').onclick=function(){modal='pay';render()});
-document.querySelectorAll('[data-paid]').forEach(function(b){b.onclick=function(){orderNo=Math.floor(100+Math.random()*900);modal='success';render()}});
-document.querySelector('[data-finish]')&& (document.querySelector('[data-finish]').onclick=function(){cart=[];modal=null;render()})
+function paint(){
+  document.documentElement.lang=lang==='ru'?'ru':'kk';
+  document.getElementById('ruBtn').classList.toggle('on',lang==='ru');
+  document.getElementById('kzBtn').classList.toggle('on',lang==='kz');
+  document.getElementById('hint').textContent=t('Внешнее меню iiko · Арай','iiko сыртқы мәзірі · Арай');
+  var cats=document.getElementById('cats');
+  cats.innerHTML=categories.map(function(c){return '<button class="cat '+(c.id===activeCat?'on':'')+'" data-cat="'+esc(c.id)+'">'+esc(categoryName(c))+'</button>'}).join('');
+  cats.querySelectorAll('[data-cat]').forEach(function(b){b.onclick=function(){activeCat=b.dataset.cat;paintGrid();}});
+  paintGrid();updateCart();
 }
-render();
+function paintGrid(){
+  var c=categories.find(function(x){return x.id===activeCat});
+  document.getElementById('title').textContent=c?categoryName(c):'Kiosk Арай';
+  var list=products.filter(function(p){return p.categoryId===activeCat});
+  var grid=document.getElementById('grid');
+  if(!list.length){
+    grid.innerHTML='<div class="empty"><b>'+t('В этой категории пока нет блюд','Бұл санатта әзірге тағам жоқ')+'</b>'+t('Состав категории берётся напрямую из внешнего меню iiko.','Санат құрамы iiko сыртқы мәзірінен тікелей алынады.')+'</div>';
+    return;
+  }
+  grid.innerHTML=list.map(function(p){
+    var pic=p.imageUrl?'<img src="'+esc(p.imageUrl)+'" alt="" loading="eager" decoding="async" onerror="this.parentNode.innerHTML=\'<div class=placeholder>DC</div>\'">':'<div class="placeholder">DC</div>';
+    var w=p.weightGrams?Math.round(p.weightGrams)+' г':'';
+    return '<article class="card"><div class="photo">'+pic+'</div><div class="body"><div class="name">'+esc(productName(p))+' <span class="weight">'+esc(w)+'</span></div><div class="desc">'+esc(p.description||'')+'</div><div class="bottom"><div class="price">'+money(p.price)+'<small>iiko · Kiosk Арай</small></div><button class="add" data-product="'+esc(p.id)+'">+</button></div></div></article>';
+  }).join('');
+  grid.querySelectorAll('[data-product]').forEach(function(b){b.onclick=function(){openProduct(products.find(function(p){return p.id===b.dataset.product}))}});
+}
+function openProduct(p){
+  selected=p;
+  var groups=p.modifierGroups||[];
+  var body='';
+  groups.forEach(function(g,gi){
+    if(!g.items||!g.items.length)return;
+    body+='<div class="section">'+esc(g.name||t('Добавки','Қоспалар'))+'</div>';
+    g.items.forEach(function(m,mi){
+      var type=Number(g.maxQuantity)===1?'radio':'checkbox';
+      var nm='g'+gi;
+      body+='<label class="opt"><input class="modInput" type="'+type+'" name="'+nm+'" data-mid="'+esc(m.id)+'" data-name="'+esc(m.name)+'" data-price="'+Number(m.price||0)+'"><div class="optmain"><div class="optn">'+esc(m.name)+'</div></div><div class="tag">'+(Number(m.price||0)>0?'+'+money(m.price):t('без доплаты','тегін'))+'</div></label>';
+    });
+  });
+  if(!groups.length)body='<div class="setup">'+t('Для этого блюда модификаторы во внешнем меню iiko пока не настроены.','Бұл тағам үшін iiko сыртқы мәзірінде модификаторлар әлі бапталмаған.')+'</div>';
+  document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal"><h2>'+esc(p.name)+'</h2><p class="lead">'+esc(p.description||'')+'</p>'+body+'<div class="actions"><button class="secondary" id="closeModal">'+t('Назад','Артқа')+'</button><button class="primary" id="confirmProduct">'+t('Добавить','Қосу')+' · '+money(p.price)+'</button></div></div></div>';
+  document.getElementById('closeModal').onclick=closeModal;
+  document.querySelectorAll('.modInput').forEach(function(i){i.onchange=updateProductButton});
+  document.getElementById('confirmProduct').onclick=confirmProduct;
+}
+function updateProductButton(){
+  var extra=0;document.querySelectorAll('.modInput:checked').forEach(function(i){extra+=Number(i.dataset.price||0)});
+  document.getElementById('confirmProduct').textContent=t('Добавить','Қосу')+' · '+money(selected.price+extra);
+}
+function confirmProduct(){
+  var mods=[],extra=0,modIds=[];
+  document.querySelectorAll('.modInput:checked').forEach(function(i){mods.push(i.dataset.name);modIds.push(i.dataset.mid);extra+=Number(i.dataset.price||0)});
+  var key=selected.id+'|'+modIds.sort().join(',');
+  var x=cart.find(function(z){return z.key===key});
+  if(x)x.q++;else cart.push({key:key,itemId:selected.itemId,sizeId:selected.sizeId,name:selected.name,basePrice:selected.price,unitPrice:selected.price+extra,q:1,mods:mods,modifierIds:modIds});
+  closeModal();updateCart();
+}
+function closeModal(){document.getElementById('modalRoot').innerHTML=''}
+function updateCart(){
+  var n=count(),s=total();
+  document.getElementById('cartHead').textContent=t('Корзина','Себет')+' · '+n;
+  document.getElementById('count').textContent=n?n+' '+t('поз.','поз.'):t('Корзина пуста','Себет бос');
+  document.getElementById('sum').textContent=money(s);
+  document.getElementById('cartItems').textContent=n?cart.slice(0,3).map(function(x){return x.name+' ×'+x.q}).join(' · '):t('Выберите блюда из меню','Мәзірден тағам таңдаңыз');
+  var b=document.getElementById('checkout');b.disabled=!n;b.textContent=t('Оформить заказ','Тапсырысты рәсімдеу')+' · '+money(s);
+}
+function openCart(){
+  if(!cart.length)return;
+  document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal"><h2>'+t('Ваш заказ','Сіздің тапсырысыңыз')+'</h2><div id="cartLines"></div><div class="actions"><button class="secondary" id="closeModal">'+t('Продолжить выбор','Таңдауды жалғастыру')+'</button><button class="primary" id="goPay">'+t('Оплатить','Төлеу')+' · '+money(total())+'</button></div></div></div>';
+  paintCartLines();document.getElementById('closeModal').onclick=closeModal;document.getElementById('goPay').onclick=openPay;
+}
+function paintCartLines(){
+  var el=document.getElementById('cartLines');if(!el)return;
+  el.innerHTML=cart.map(function(x,i){return '<div class="cartline"><div><b>'+esc(x.name)+'</b><div class="mods">'+esc(x.mods.join(' · '))+'</div><div class="qty"><button data-minus="'+i+'">−</button><span>'+x.q+'</span><button data-plus="'+i+'">+</button></div></div><b>'+money(x.unitPrice*x.q)+'</b></div>'}).join('');
+  el.querySelectorAll('[data-plus]').forEach(function(b){b.onclick=function(){cart[+b.dataset.plus].q++;paintCartLines();updateCart();document.getElementById('goPay').textContent=t('Оплатить','Төлеу')+' · '+money(total())}});
+  el.querySelectorAll('[data-minus]').forEach(function(b){b.onclick=function(){var i=+b.dataset.minus;cart[i].q--;if(cart[i].q<=0)cart.splice(i,1);if(!cart.length){closeModal();updateCart();return}paintCartLines();updateCart();document.getElementById('goPay').textContent=t('Оплатить','Төлеу')+' · '+money(total())}});
+}
+function openPay(){
+  document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal"><h2>'+t('Способ оплаты','Төлем тәсілі')+'</h2><div class="paygrid"><button class="pay payChoice"><div style="font-size:42px">💳</div><b>ForteBank</b><span>'+t('Банковская карта / Apple Pay','Банк картасы / Apple Pay')+'</span></button><button class="pay payChoice"><div style="font-size:42px">▦</div><b>'+t('Единый QR','Бірыңғай QR')+'</b><span>'+t('QR на сумму заказа','Тапсырыс сомасына QR')+'</span></button></div><div class="actions"><button class="secondary" id="backCart">'+t('Назад','Артқа')+'</button></div></div></div>';
+  document.getElementById('backCart').onclick=openCart;
+  document.querySelectorAll('.payChoice').forEach(function(b){b.onclick=showSuccess});
+}
+function showSuccess(){
+  var no=Math.floor(100+Math.random()*900);
+  document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal center"><div class="success">✓</div><h2>'+t('Заказ принят','Тапсырыс қабылданды')+'</h2><div style="font-size:42px;font-weight:1000;margin:14px">№ '+no+'</div><p class="lead">'+t('Оплата и отправка в iiko пока в тестовом режиме.','Төлем және iiko-ға жіберу әзірге тест режимінде.')+'</p><button class="primary" id="finish" style="width:100%">'+t('Готово','Дайын')+'</button></div></div>';
+  document.getElementById('finish').onclick=function(){cart=[];closeModal();updateCart()};
+}
+document.getElementById('ruBtn').onclick=function(){lang='ru';paint()};
+document.getElementById('kzBtn').onclick=function(){lang='kz';paint()};
+document.getElementById('cartHead').onclick=openCart;
+document.getElementById('checkout').onclick=openCart;
+paint();loadMenu();
 </script>
 </body></html>
