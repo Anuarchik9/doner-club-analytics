@@ -19,8 +19,8 @@
 .body{padding:10px 0 0;display:flex;flex-direction:column}.name{font-size:17px;font-weight:1000;line-height:1.12}.weight{font-size:11px;color:#777;font-weight:850}.desc{font-size:11px;color:var(--muted);line-height:1.35;margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:45px}.bottom{margin-top:auto;padding-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}.price{font-size:15px;font-weight:1000;background:var(--o);color:#fff;padding:8px 11px;border-radius:10px;display:inline-flex;align-items:center;position:relative;overflow:visible;transition:background .2s ease,transform .2s ease,box-shadow .2s ease,filter .2s ease}.price::after{content:'';position:absolute;inset:-5px;border-radius:14px;border:2px solid rgba(255,90,18,0);transform:scale(.9);pointer-events:none;transition:border-color .2s ease,transform .35s ease,opacity .35s ease;opacity:0}.price:hover{background:#ff671f;transform:translateY(-2px) scale(1.045);box-shadow:0 8px 20px rgba(255,90,18,.26);filter:brightness(1.03)}.price:hover::after{border-color:rgba(255,90,18,.20);transform:scale(1);opacity:1;animation:addHintRing 1.25s ease-in-out infinite}.price:active{transform:translateY(0) scale(.98);box-shadow:0 3px 9px rgba(255,90,18,.20)}.price small{display:none}.add{width:44px;height:44px;border-radius:14px;background:var(--o);color:#fff;font-size:28px;font-weight:900;display:grid;place-items:center;line-height:1;position:relative;overflow:visible;transition:background .2s ease,transform .2s ease,box-shadow .2s ease,filter .2s ease}.add::after{content:'';position:absolute;inset:-5px;border-radius:18px;border:2px solid rgba(255,90,18,0);transform:scale(.88);pointer-events:none;transition:border-color .2s ease,transform .35s ease,opacity .35s ease;opacity:0}.add:hover{background:#ff671f;transform:translateY(-2px) scale(1.06);box-shadow:0 8px 20px rgba(255,90,18,.30);filter:brightness(1.03)}.add:hover::after{border-color:rgba(255,90,18,.22);transform:scale(1);opacity:1;animation:addHintRing 1.25s ease-in-out infinite}.add:active{transform:translateY(0) scale(.96);box-shadow:0 3px 9px rgba(255,90,18,.22)}.cardAction{display:flex;align-items:center;justify-content:flex-end;min-width:44px}.cardQty{height:44px;min-width:112px;border-radius:14px;background:#08ae82;color:#fff;display:grid;grid-template-columns:38px 1fr 38px;align-items:center;overflow:hidden;box-shadow:0 8px 18px rgba(8,174,130,.18)}.cardQty button{height:44px;background:#e9f8f3;color:#08a77d;font-size:22px;font-weight:1000;display:grid;place-items:center;transition:background .15s ease,color .15s ease,transform .15s ease}.cardQty button:first-child{border-right:1px solid rgba(8,174,130,.18)}.cardQty button:last-child{border-left:1px solid rgba(8,174,130,.18)}.cardQty button:hover{background:#d7f2e9;color:#078c69}.cardQty button:active{transform:scale(.9);background:#c9ecdf}.cardQty span{text-align:center;font-weight:1000;font-size:15px;background:#08ae82;color:#fff;height:44px;display:grid;place-items:center}.addedBadge{height:44px;min-width:92px;padding:0 13px;border-radius:14px;background:#08ae82;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:1000;box-shadow:0 8px 18px rgba(8,174,130,.18)}.addedPulse{animation:addedPulse .55s cubic-bezier(.2,.8,.2,1)}.orderbar.cartPulse{animation:cartPulse .55s ease}.carthead.cartPulse{animation:cartPulse .55s ease}@keyframes addHintRing{0%,100%{transform:scale(.96);opacity:.35}50%{transform:scale(1.12);opacity:.08}}@keyframes addedPulse{0%{transform:scale(1)}40%{transform:scale(1.025);filter:brightness(1.04)}100%{transform:scale(1)}}@keyframes cartPulse{0%{transform:scale(1)}40%{transform:scale(1.018)}100%{transform:scale(1)}}
 @keyframes modalBackdropIn{from{background:rgba(0,0,0,0)}to{background:rgba(0,0,0,.53)}}@keyframes modalCardIn{0%{opacity:0;transform:translateY(18px) scale(.975)}60%{opacity:1;transform:translateY(-2px) scale(1.003)}100%{opacity:1;transform:translateY(0) scale(1)}}@media(prefers-reduced-motion:reduce){.overlay,.modal{animation:none!important}}.empty{grid-column:1/-1;background:#fff;border:1px solid var(--line);border-radius:24px;padding:36px;text-align:center;color:#756e68}.empty b{display:block;color:#111;font-size:21px;margin-bottom:8px}
 .orderbar{position:fixed;left:16px;right:16px;bottom:14px;height:76px;background:#151515;color:#fff;border-radius:22px;display:flex;align-items:center;padding:10px 14px 10px 18px;gap:14px;box-shadow:0 18px 45px #0003;z-index:15}.sumwrap{min-width:155px}.count{font-size:11px;color:#aaa;font-weight:800}.sum{font-size:23px;font-weight:1000}.items{flex:1;color:#c8c8c8;font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.checkout{height:52px;border-radius:16px;padding:0 22px;background:var(--o);color:#fff;font-weight:1000}.checkout:disabled{opacity:.4}
-.overlay{position:fixed;inset:0;background:#0008;z-index:30;display:grid;place-items:center;padding:20px;animation:modalBackdropIn .18s ease-out both}.modal{width:min(760px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:30px;padding:26px;transform-origin:center center;animation:modalCardIn .26s cubic-bezier(.22,.8,.22,1) both}.productModal{width:min(1080px,96vw);padding:0;overflow:hidden;display:grid;grid-template-columns:minmax(320px,48%) 1fr}.productHero{min-height:590px;background:#93a75b;display:flex;align-items:center;justify-content:center;overflow:hidden}.productHero img{width:100%;height:100%;min-height:590px;object-fit:contain;display:block}.productInfo{padding:28px 30px;max-height:92vh;overflow:auto}.productTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.productClose{width:38px;height:38px;border-radius:50%;background:#f3f0ec;color:#333;font-size:22px;line-height:1;flex:0 0 auto}.productMeta{font-size:12px;font-weight:900;color:#766f69;margin:4px 0 8px}.modal h2{font-size:30px;margin:0 0 8px}.lead{margin:0 0 18px;color:var(--muted);line-height:1.4}.section{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:#888;font-weight:950;margin:18px 0 8px}.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:16px;padding:13px 14px;margin:8px 0}.opt input{width:22px;height:22px;accent-color:var(--o)}.optmain{flex:1}.optn{font-weight:950}.optnote{font-size:11px;color:#888;margin-top:2px}.tag{font-size:12px;font-weight:950;color:#333}.actions{display:flex;gap:12px;margin-top:20px}.secondary,.primary{height:54px;border-radius:16px;font-weight:1000}.secondary{flex:1;background:#f2efeb}.primary{flex:1.5;background:var(--o);color:#fff}.cartline{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #eee}.mods{font-size:11px;color:#777;margin-top:4px}.qty{display:inline-flex;align-items:center;border:1px solid #ddd;border-radius:11px;overflow:hidden;margin-top:8px}.qty button{width:34px;height:32px;background:#f4f1ed;font-weight:1000}.qty span{width:34px;text-align:center;font-weight:900}.cartModal{width:min(900px,96vw);max-height:90vh;padding:24px 26px 20px;position:relative}.cartModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-right:48px}.cartSummary{font-size:13px;color:var(--muted);margin-top:5px}.cartGrandTotal{font-size:28px;font-weight:1000;white-space:nowrap}.cartClose{position:absolute;right:20px;top:18px;width:40px;height:40px;border-radius:50%;background:#f2efeb;color:#555;font-size:25px;display:grid;place-items:center;transition:.16s}.cartClose:hover{background:#e9e4df;transform:scale(1.05)}.cartItemsBox{margin-top:12px;border-top:1px solid #eee}.cartRichLine{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:14px;align-items:start;padding:14px 0;border-bottom:1px solid #eee}.cartThumb{width:76px;height:76px;border-radius:14px;overflow:hidden;background:#91aa5a;display:grid;place-items:center}.cartThumb img{width:100%;height:100%;object-fit:cover}.cartThumbFallback{color:#fff;font-size:24px;font-weight:1000}.cartRichName{font-size:17px;font-weight:1000;line-height:1.15}.cartRichDesc{font-size:11px;color:#777;margin-top:4px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.cartRichMods{font-size:11px;color:#777;margin-top:5px}.cartRichBottom{display:flex;align-items:center;gap:12px;margin-top:9px}.cartLineTotal{font-size:18px;font-weight:1000;white-space:nowrap;padding-top:3px}.recommendWrap{margin-top:18px;padding-top:18px;border-top:1px solid #eee}.recommendTitle{font-size:22px;font-weight:1000;margin:0 0 4px}.recommendSub{font-size:12px;color:var(--muted);margin-bottom:12px}.recommendGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.recommendCard{position:relative;border:1px solid #e9e2db;border-radius:18px;overflow:hidden;background:#fff;cursor:pointer;transition:transform .17s ease,box-shadow .17s ease,border-color .17s ease}.recommendCard:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.08);border-color:#ddd3ca}.recommendPhoto{height:auto;aspect-ratio:4/3;background:#91aa5a;overflow:hidden}.recommendPhoto img{width:100%;height:100%;object-fit:contain;display:block}.recommendBody{padding:10px 11px 12px}.recommendPrice{font-size:16px;font-weight:1000;color:var(--o)}.recommendName{font-size:14px;font-weight:950;line-height:1.2;margin-top:4px}.recommendAdd{position:absolute;right:9px;top:9px;width:38px;height:38px;border-radius:12px;background:#e9f7ff;color:#2889b4;font-size:26px;font-weight:900;display:grid;place-items:center;box-shadow:0 5px 12px rgba(40,137,180,.15);transition:.16s}.recommendAdd:hover{transform:scale(1.06);background:#d9f1ff}.recommendBadge{position:absolute;left:9px;top:9px;border-radius:999px;background:#d9f1ff;color:#146b9a;font-size:10px;font-weight:900;padding:5px 8px}.cartFooter{position:sticky;bottom:-1px;background:#fff;padding-top:14px;margin-top:14px}.cartFooter .actions{margin-top:0}.paygrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pay{padding:20px;border:1px solid var(--line);border-radius:20px;background:#fff;text-align:left}.pay b{display:block;font-size:19px;margin:8px 0}.pay span{font-size:12px;color:#777}.success{width:78px;height:78px;border-radius:50%;margin:0 auto 14px;background:#e8f5e4;color:#4b9538;display:grid;place-items:center;font-size:44px;font-weight:1000}.center{text-align:center}.setup{background:#fff7e7;border:1px solid #f1d79d;border-radius:15px;padding:13px 15px;margin-bottom:14px;color:#6c5726;font-size:12px;line-height:1.45}
-@media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.status{display:none}.productModal{grid-template-columns:42% 58%}.productHero,.productHero img{min-height:520px}}@media(max-width:650px){.grid{grid-template-columns:1fr}.photo{height:210px}.items{display:none}.orderbar{left:8px;right:8px}.checkout{padding:0 14px}.productModal{display:block}.productHero,.productHero img{min-height:260px;max-height:300px}.productInfo{padding:22px}.cartModal{padding:20px 16px 16px}.cartModalHead{display:block;padding-right:42px}.cartGrandTotal{font-size:24px;margin-top:8px}.cartRichLine{grid-template-columns:62px minmax(0,1fr);gap:10px}.cartThumb{width:62px;height:62px}.cartLineTotal{grid-column:2}.recommendGrid{grid-template-columns:1fr 1fr}.recommendPhoto{height:auto;aspect-ratio:4/3}.recommendName{font-size:12px}.recommendPrice{font-size:14px}}
+.overlay{position:fixed;inset:0;background:#0008;z-index:30;display:grid;place-items:center;padding:20px;animation:modalBackdropIn .18s ease-out both}.modal{width:min(760px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:30px;padding:26px;transform-origin:center center;animation:modalCardIn .26s cubic-bezier(.22,.8,.22,1) both}.productModal{width:min(1080px,96vw);padding:0;overflow:hidden;display:grid;grid-template-columns:minmax(320px,48%) 1fr}.productHero{min-height:590px;background:#93a75b;display:flex;align-items:center;justify-content:center;overflow:hidden}.productHero img{width:100%;height:100%;min-height:590px;object-fit:contain;display:block}.productInfo{padding:28px 30px;max-height:92vh;overflow:auto}.productTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.productClose{width:38px;height:38px;border-radius:50%;background:#f3f0ec;color:#333;font-size:22px;line-height:1;flex:0 0 auto}.productMeta{font-size:12px;font-weight:900;color:#766f69;margin:4px 0 8px}.modal h2{font-size:30px;margin:0 0 8px}.lead{margin:0 0 18px;color:var(--muted);line-height:1.4}.section{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:#888;font-weight:950;margin:18px 0 8px}.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:16px;padding:13px 14px;margin:8px 0}.opt input{width:22px;height:22px;accent-color:var(--o)}.optmain{flex:1}.optn{font-weight:950}.optnote{font-size:11px;color:#888;margin-top:2px}.tag{font-size:12px;font-weight:950;color:#333}.actions{display:flex;gap:12px;margin-top:20px}.secondary,.primary{height:54px;border-radius:16px;font-weight:1000}.secondary{flex:1;background:#f2efeb}.primary{flex:1.5;background:var(--o);color:#fff}.cartline{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #eee}.mods{font-size:11px;color:#777;margin-top:4px}.qty{display:inline-flex;align-items:center;border:1px solid #ddd;border-radius:11px;overflow:hidden;margin-top:8px}.qty button{width:34px;height:32px;background:#f4f1ed;font-weight:1000}.qty span{width:34px;text-align:center;font-weight:900}.cartModal{width:min(900px,96vw);max-height:90vh;padding:24px 26px 20px;position:relative}.cartModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-right:48px}.cartSummary{font-size:13px;color:var(--muted);margin-top:5px}.cartGrandTotal{font-size:28px;font-weight:1000;white-space:nowrap}.cartClose{position:absolute;right:20px;top:18px;width:40px;height:40px;border-radius:50%;background:#f2efeb;color:#555;font-size:25px;display:grid;place-items:center;transition:.16s}.cartClose:hover{background:#e9e4df;transform:scale(1.05)}.cartItemsBox{margin-top:12px;border-top:1px solid #eee}.cartRichLine{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:14px;align-items:start;padding:14px 0;border-bottom:1px solid #eee}.cartThumb{width:76px;height:76px;border-radius:14px;overflow:hidden;background:#91aa5a;display:grid;place-items:center}.cartThumb img{width:100%;height:100%;object-fit:cover}.cartThumbFallback{color:#fff;font-size:24px;font-weight:1000}.cartRichName{font-size:17px;font-weight:1000;line-height:1.15}.cartRichDesc{font-size:11px;color:#777;margin-top:4px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.cartRichMods{font-size:11px;color:#777;margin-top:5px}.cartRichBottom{display:flex;align-items:center;gap:12px;margin-top:9px}.cartLineTotal{font-size:18px;font-weight:1000;white-space:nowrap;padding-top:3px}.recommendWrap{margin-top:18px;padding-top:18px;border-top:1px solid #eee}.recommendTitle{font-size:22px;font-weight:1000;margin:0 0 4px}.recommendSub{font-size:12px;color:var(--muted);margin-bottom:12px}.recommendGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.recommendCard{position:relative;border:1px solid #e9e2db;border-radius:18px;overflow:hidden;background:#fff;cursor:pointer;transition:transform .17s ease,box-shadow .17s ease,border-color .17s ease}.recommendCard:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.08);border-color:#ddd3ca}.recommendPhoto{height:auto;aspect-ratio:4/3;background:#91aa5a;overflow:hidden}.recommendPhoto img{width:100%;height:100%;object-fit:contain;display:block}.recommendBody{padding:10px 11px 12px}.recommendPrice{font-size:16px;font-weight:1000;color:var(--o)}.recommendName{font-size:14px;font-weight:950;line-height:1.2;margin-top:4px}.recommendAdd{position:absolute;right:9px;top:9px;width:38px;height:38px;border-radius:12px;background:#e9f7ff;color:#2889b4;font-size:26px;font-weight:900;display:grid;place-items:center;box-shadow:0 5px 12px rgba(40,137,180,.15);transition:.16s}.recommendAdd:hover{transform:scale(1.06);background:#d9f1ff}.recommendBadge{position:absolute;left:9px;top:9px;border-radius:999px;background:#d9f1ff;color:#146b9a;font-size:10px;font-weight:900;padding:5px 8px}.cartFooter{position:sticky;bottom:-1px;background:#fff;padding-top:14px;margin-top:14px}.cartFooter .actions{margin-top:0}.testIikoBtn{height:54px;border-radius:16px;padding:0 16px;background:#232323;color:#fff;font-weight:1000;white-space:nowrap}.testIikoBtn:hover{background:#333}.testIikoPanel{margin-top:14px;border:1px solid #e7dfd8;background:#faf8f5;border-radius:18px;padding:15px}.testIikoNotice{font-size:12px;line-height:1.45;color:#6f665e;background:#fff5e9;border:1px solid #ffd9b5;border-radius:14px;padding:11px 12px;margin-bottom:12px}.testIikoGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.testIikoField label{display:block;font-size:11px;font-weight:900;color:#777;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}.testIikoField select{width:100%;height:46px;border:1px solid #ddd5ce;border-radius:13px;background:#fff;padding:0 12px;font:inherit}.testIikoStatus{margin-top:11px;font-size:12px;color:#6f665e}.testIikoSend{width:100%;height:54px;border-radius:16px;background:var(--o);color:#fff;font-weight:1000;margin-top:12px}.testIikoSend:disabled{opacity:.45}.testIikoBack{width:100%;height:46px;border-radius:14px;background:#f2efeb;font-weight:950;margin-top:9px}.testResult{border-radius:16px;padding:14px;margin-top:12px;font-size:13px;line-height:1.45}.testResult.ok{background:#edf8e9;color:#34752b;border:1px solid #cfe8c7}.testResult.bad{background:#fff0ec;color:#a9472e;border:1px solid #f3c7bb}.paygrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pay{padding:20px;border:1px solid var(--line);border-radius:20px;background:#fff;text-align:left}.pay b{display:block;font-size:19px;margin:8px 0}.pay span{font-size:12px;color:#777}.success{width:78px;height:78px;border-radius:50%;margin:0 auto 14px;background:#e8f5e4;color:#4b9538;display:grid;place-items:center;font-size:44px;font-weight:1000}.center{text-align:center}.setup{background:#fff7e7;border:1px solid #f1d79d;border-radius:15px;padding:13px 15px;margin-bottom:14px;color:#6c5726;font-size:12px;line-height:1.45}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.status{display:none}.productModal{grid-template-columns:42% 58%}.productHero,.productHero img{min-height:520px}}@media(max-width:650px){.grid{grid-template-columns:1fr}.photo{height:210px}.items{display:none}.orderbar{left:8px;right:8px}.checkout{padding:0 14px}.productModal{display:block}.productHero,.productHero img{min-height:260px;max-height:300px}.productInfo{padding:22px}.cartModal{padding:20px 16px 16px}.cartModalHead{display:block;padding-right:42px}.cartGrandTotal{font-size:24px;margin-top:8px}.cartRichLine{grid-template-columns:62px minmax(0,1fr);gap:10px}.cartThumb{width:62px;height:62px}.cartLineTotal{grid-column:2}.recommendGrid{grid-template-columns:1fr 1fr}.recommendPhoto{height:auto;aspect-ratio:4/3}.recommendName{font-size:12px}.recommendPrice{font-size:14px}.testIikoGrid{grid-template-columns:1fr}.cartFooter .actions{flex-wrap:wrap}.testIikoBtn{width:100%}}
 </style>
 </head>
 <body>
@@ -72,6 +72,7 @@ function restoreCartSession(){
       x.unitPrice=Number(x.unitPrice)||0;
       x.mods=Array.isArray(x.mods)?x.mods:[];
       x.modifierIds=Array.isArray(x.modifierIds)?x.modifierIds:[];
+      x.modifierGroupIds=Array.isArray(x.modifierGroupIds)?x.modifierGroupIds:[];
       return x;
     });
   }catch(e){}
@@ -446,7 +447,7 @@ function openProduct(p){
       var type=Number(g.maxQuantity)===1?'radio':'checkbox';
       var nm='g'+gi;
       var checked=Number(m.byDefault||0)>0?' checked':'';
-      body+='<label class="opt"><input class="modInput" type="'+type+'" name="'+nm+'" data-mid="'+esc(m.id)+'" data-name="'+esc(m.name)+'" data-price="'+Number(m.price||0)+'"'+checked+'><div class="optmain"><div class="optn">'+esc(m.name)+'</div></div><div class="tag">'+(Number(m.price||0)>0?'+'+money(m.price):t('без доплаты','тегін'))+'</div></label>';
+      body+='<label class="opt"><input class="modInput" type="'+type+'" name="'+nm+'" data-mid="'+esc(m.id)+'" data-groupid="'+esc(g.id||'')+'" data-name="'+esc(m.name)+'" data-price="'+Number(m.price||0)+'"'+checked+'><div class="optmain"><div class="optn">'+esc(m.name)+'</div></div><div class="tag">'+(Number(m.price||0)>0?'+'+money(m.price):t('без доплаты','тегін'))+'</div></label>';
     });
   });
   var image=p.imageUrl
@@ -476,11 +477,16 @@ function updateProductButton(){
 }
 function confirmProduct(){
   var productId=selected.id;
-  var mods=[],extra=0,modIds=[];
-  document.querySelectorAll('.modInput:checked').forEach(function(i){mods.push(i.dataset.name);modIds.push(i.dataset.mid);extra+=Number(i.dataset.price||0)});
-  var key=selected.id+'|'+modIds.sort().join(',');
+  var mods=[],extra=0,modIds=[],modGroupIds=[];
+  document.querySelectorAll('.modInput:checked').forEach(function(i){
+    mods.push(i.dataset.name);
+    modIds.push(i.dataset.mid);
+    modGroupIds.push(i.dataset.groupid||'');
+    extra+=Number(i.dataset.price||0);
+  });
+  var key=selected.id+'|'+modIds.slice().sort().join(',');
   var x=cart.find(function(z){return z.key===key});
-  if(x)x.q++;else cart.push({key:key,productId:selected.id,itemId:selected.itemId,sizeId:selected.sizeId,name:selected.name,description:selected.description||'',imageUrl:selected.imageUrl||'',basePrice:selected.price,unitPrice:selected.price+extra,q:1,mods:mods,modifierIds:modIds});
+  if(x)x.q++;else cart.push({key:key,productId:selected.id,itemId:selected.itemId,sizeId:selected.sizeId,name:selected.name,description:selected.description||'',imageUrl:selected.imageUrl||'',basePrice:selected.price,unitPrice:selected.price+extra,q:1,mods:mods,modifierIds:modIds,modifierGroupIds:modGroupIds});
   closeModal();
   updateCart();
   refreshCardActions();
@@ -576,12 +582,13 @@ function openCart(){
       '<div class="cartModalHead"><div><h2>'+t('Ваш заказ','Сіздің тапсырысыңыз')+'</h2><div class="cartSummary">'+t('Проверьте выбранные блюда перед оплатой','Төлемге дейін таңдалған тағамдарды тексеріңіз')+'</div></div><div class="cartGrandTotal">'+money(total())+'</div></div>'+
       '<div id="cartLines" class="cartItemsBox"></div>'+
       '<div id="recommendWrap" class="recommendWrap"></div>'+
-      '<div class="cartFooter"><div class="actions"><button class="secondary" id="closeModal">'+t('Продолжить выбор','Таңдауды жалғастыру')+'</button><button class="primary" id="goPay">'+t('Оплатить','Төлеу')+' · '+money(total())+'</button></div></div>'+
+      '<div class="cartFooter"><div class="actions"><button class="secondary" id="closeModal">'+t('Продолжить выбор','Таңдауды жалғастыру')+'</button><button class="testIikoBtn" id="testIikoBtn">'+t('Тест в iiko','iiko тесті')+'</button><button class="primary" id="goPay">'+t('Оплатить','Төлеу')+' · '+money(total())+'</button></div></div>'+
     '</div></div>';
   enableBackdropClose();
   paintCartLines();
   document.getElementById('closeModal').onclick=closeModal;
   document.getElementById('cartClose').onclick=closeModal;
+  document.getElementById('testIikoBtn').onclick=openTestIiko;
   document.getElementById('goPay').onclick=openPay;
 }
 function paintCartLines(){
@@ -642,6 +649,123 @@ function paintCartLines(){
       }
     };
   });
+}
+function testOrderItemsPayload(){
+  return cart.map(function(x){
+    var modifiers=(x.modifierIds||[]).map(function(id,index){
+      var modifier={productId:id,amount:1};
+      var groupId=(x.modifierGroupIds||[])[index];
+      if(groupId)modifier.productGroupId=groupId;
+      return modifier;
+    });
+    var item={
+      productId:x.itemId,
+      amount:x.q
+    };
+    if(x.sizeId)item.productSizeId=x.sizeId;
+    if(modifiers.length)item.modifiers=modifiers;
+    return item;
+  }).filter(function(x){return x.productId&&x.amount>0});
+}
+function openTestIiko(){
+  if(!cart.length)return;
+  document.getElementById('modalRoot').innerHTML=
+    '<div class="overlay"><div class="modal">'+
+      '<h2>'+t('Тестовый заказ в iiko','iiko-ға тест тапсырыс')+'</h2>'+
+      '<div class="testIikoNotice">'+t('На этом экране ничего не отправляется автоматически. Реальный тестовый заказ уйдёт в iiko только после нажатия кнопки «Отправить тестовый заказ» и дополнительного подтверждения. Оплата не передаётся.','Бұл экранда ештеңе автоматты түрде жіберілмейді. Нақты тест тапсырыс тек «Тест тапсырысты жіберу» батырмасын басып, қосымша растағаннан кейін iiko-ға жіберіледі. Төлем жіберілмейді.')+'</div>'+
+      '<div class="testIikoPanel" id="testIikoPanel"><div class="testIikoStatus" id="testIikoStatus">'+t('Получаю кассы и столы Арай из iiko…','Арай кассалары мен үстелдерін iiko-дан алып жатырмын…')+'</div></div>'+
+      '<button class="testIikoBack" id="testIikoBack">'+t('Назад в корзину','Себетке қайту')+'</button>'+
+    '</div></div>';
+  enableBackdropClose();
+  document.getElementById('testIikoBack').onclick=openCart;
+  loadTestIikoConfig();
+}
+async function loadTestIikoConfig(){
+  var panel=document.getElementById('testIikoPanel');
+  if(!panel)return;
+  try{
+    var response=await fetch('/kiosk-iiko-config?point=Arai',{cache:'no-store'});
+    var data=await response.json();
+    if(!response.ok||!data.success)throw data;
+
+    var groups=data.terminalGroups||[];
+    var tables=data.tables||[];
+    if(!groups.length||!tables.length){
+      panel.innerHTML='<div class="testResult bad">'+t('iiko не вернул доступную кассовую группу или стол. Заказ не отправлялся.','iiko қолжетімді касса тобын немесе үстелді қайтармады. Тапсырыс жіберілген жоқ.')+'</div>';
+      return;
+    }
+
+    panel.innerHTML=
+      '<div class="testIikoGrid">'+
+        '<div class="testIikoField"><label>'+t('Касса / terminal group','Касса / terminal group')+'</label><select id="testTerminal">'+groups.map(function(g){return '<option value="'+esc(g.id)+'">'+esc(g.name)+(g.isAlive===false?' · OFFLINE':g.isAlive===true?' · online':'')+'</option>'}).join('')+'</select></div>'+
+        '<div class="testIikoField"><label>'+t('Стол','Үстел')+'</label><select id="testTable"></select></div>'+
+      '</div>'+
+      '<div class="testIikoStatus" id="testConfigInfo"></div>'+
+      '<button class="testIikoSend" id="sendTestIiko">'+t('Отправить тестовый заказ в iiko','Тест тапсырысты iiko-ға жіберу')+'</button>'+
+      '<div id="testOrderResult"></div>';
+
+    var terminal=document.getElementById('testTerminal');
+    var table=document.getElementById('testTable');
+    function fillTables(){
+      var groupId=terminal.value;
+      var filtered=tables.filter(function(x){return String(x.terminalGroupId)===String(groupId)});
+      table.innerHTML=filtered.map(function(x){
+        var label=(x.sectionName?x.sectionName+' · ':'')+(x.name||('Стол '+(x.number==null?'':x.number)));
+        return '<option value="'+esc(x.id)+'">'+esc(label)+'</option>';
+      }).join('');
+      document.getElementById('sendTestIiko').disabled=!filtered.length;
+      document.getElementById('testConfigInfo').textContent=filtered.length
+        ? t('Найдено столов: ','Үстелдер саны: ')+filtered.length
+        : t('Для этой кассовой группы столы не найдены.','Бұл касса тобы үшін үстелдер табылмады.');
+    }
+    terminal.onchange=fillTables;
+    fillTables();
+    document.getElementById('sendTestIiko').onclick=sendTestIikoOrder;
+  }catch(error){
+    panel.innerHTML='<div class="testResult bad">'+t('Не удалось получить конфигурацию iiko. Ничего не отправлено.','iiko конфигурациясын алу мүмкін болмады. Ештеңе жіберілген жоқ.')+'<br><small>'+esc(error.message||error.details||error.code||'')+'</small></div>';
+  }
+}
+async function sendTestIikoOrder(){
+  var terminal=document.getElementById('testTerminal');
+  var table=document.getElementById('testTable');
+  var button=document.getElementById('sendTestIiko');
+  var result=document.getElementById('testOrderResult');
+  if(!terminal||!table||!terminal.value||!table.value)return;
+
+  var ok=window.confirm(t(
+    'Отправить РЕАЛЬНЫЙ тестовый заказ на кассу/кухню Арай? Оплата передаваться не будет.',
+    'Арай кассасына/ас үйіне НАҚТЫ тест тапсырыс жіберілсін бе? Төлем жіберілмейді.'
+  ));
+  if(!ok)return;
+
+  button.disabled=true;
+  button.textContent=t('Отправляю в iiko…','iiko-ға жіберіп жатырмын…');
+  result.innerHTML='';
+  try{
+    var response=await fetch('/kiosk-test-order',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        confirm:'SEND_TEST_ORDER',
+        point:'Arai',
+        terminalGroupId:terminal.value,
+        tableId:table.value,
+        items:testOrderItemsPayload()
+      })
+    });
+    var data=await response.json();
+    if(!response.ok||!data.success)throw data;
+    var info=(data.iiko&&data.iiko.orderInfo)||{};
+    result.innerHTML='<div class="testResult ok"><b>'+t('Запрос отправлен в iiko.','Сұрау iiko-ға жіберілді.')+'</b><br>'+
+      t('Статус: ','Күйі: ')+esc(info.creationStatus||'—')+
+      (info.id?'<br>'+t('ID заказа: ','Тапсырыс ID: ')+esc(info.id):'')+
+      '<br>'+t('Теперь проверь кассу и кухню Арай. Корзина специально не очищена.','Енді Арай кассасы мен ас үйін тексер. Себет әдейі тазаланған жоқ.')+'</div>';
+  }catch(error){
+    result.innerHTML='<div class="testResult bad"><b>'+t('iiko не принял тестовый заказ.','iiko тест тапсырысты қабылдамады.')+'</b><br>'+esc(error.message||error.details||error.code||'Неизвестная ошибка')+'</div>';
+  }finally{
+    button.disabled=false;
+    button.textContent=t('Отправить тестовый заказ в iiko','Тест тапсырысты iiko-ға жіберу');
+  }
 }
 function openPay(){
   document.getElementById('modalRoot').innerHTML='<div class="overlay"><div class="modal"><h2>'+t('Способ оплаты','Төлем тәсілі')+'</h2><div class="paygrid"><button class="pay payChoice"><div style="font-size:42px">💳</div><b>ForteBank</b><span>'+t('Банковская карта / Apple Pay','Банк картасы / Apple Pay')+'</span></button><button class="pay payChoice"><div style="font-size:42px">▦</div><b>'+t('Единый QR','Бірыңғай QR')+'</b><span>'+t('QR на сумму заказа','Тапсырыс сомасына QR')+'</span></button></div><div class="actions"><button class="secondary" id="backCart">'+t('Назад','Артқа')+'</button></div></div></div>';
