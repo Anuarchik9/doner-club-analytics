@@ -205,6 +205,120 @@ def get_products_map(force_refresh=False):
 
 
 
+
+def get_external_menus(organization_id):
+    response = iiko_post(
+        "/api/2/menu",
+        {"organizationIds": [organization_id]},
+        timeout=35,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_external_menu_by_id(external_menu_id, organization_id):
+    response = iiko_post(
+        "/api/2/menu/by_id",
+        {
+            "externalMenuId": str(external_menu_id),
+            "organizationIds": [organization_id],
+        },
+        timeout=45,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _menu_price(prices, organization_id):
+    prices = prices or []
+    for entry in prices:
+        if str(entry.get("organizationId")) == str(organization_id):
+            try:
+                return round(float(entry.get("price")), 2)
+            except (TypeError, ValueError):
+                pass
+    for entry in prices:
+        try:
+            return round(float(entry.get("price")), 2)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _normalize_modifier_item(item, organization_id):
+    sizes = item.get("itemSizes") or []
+    size = next((s for s in sizes if s.get("isDefault")), None) or (sizes[0] if sizes else {})
+    return {
+        "id": item.get("itemId"),
+        "sku": item.get("sku"),
+        "name": item.get("name"),
+        "price": _menu_price(size.get("prices"), organization_id) or 0,
+        "imageUrl": size.get("buttonImageUrl"),
+        "isHidden": bool(item.get("isHidden") or size.get("isHidden")),
+    }
+
+
+def normalize_external_menu(menu_data, organization_id):
+    categories = []
+    products = []
+    for category in menu_data.get("itemCategories", []) or []:
+        if category.get("isHidden"):
+            continue
+        category_id = category.get("id")
+        categories.append({
+            "id": category_id,
+            "name": category.get("name"),
+            "description": category.get("description"),
+            "imageUrl": category.get("buttonImageUrl") or category.get("headerImageUrl"),
+        })
+        for item in category.get("items", []) or []:
+            if item.get("isHidden"):
+                continue
+            sizes = item.get("itemSizes") or []
+            if not sizes:
+                continue
+            for idx, size in enumerate(sizes):
+                if size.get("isHidden"):
+                    continue
+                price = _menu_price(size.get("prices"), organization_id)
+                if price is None:
+                    continue
+                modifier_groups = []
+                for group in size.get("itemModifierGroups", []) or []:
+                    modifier_groups.append({
+                        "id": group.get("id"),
+                        "name": group.get("name"),
+                        "minQuantity": group.get("minQuantity") or 0,
+                        "maxQuantity": group.get("maxQuantity") or 0,
+                        "items": [
+                            _normalize_modifier_item(modifier, organization_id)
+                            for modifier in (group.get("items") or [])
+                            if not modifier.get("isHidden")
+                        ],
+                    })
+                size_name = (size.get("sizeName") or "").strip()
+                display_name = item.get("name") or "Позиция"
+                if len(sizes) > 1 and size_name:
+                    display_name = f"{display_name} — {size_name}"
+                products.append({
+                    "id": f"{item.get('itemId')}:{size.get('sizeId') or idx}",
+                    "itemId": item.get("itemId"),
+                    "sizeId": size.get("sizeId"),
+                    "sku": item.get("sku"),
+                    "categoryId": category_id,
+                    "name": display_name,
+                    "description": item.get("description") or "",
+                    "price": price,
+                    "weightGrams": size.get("portionWeightGrams") or 0,
+                    "imageUrl": (
+                        size.get("buttonImageUrl")
+                        or category.get("buttonImageUrl")
+                        or category.get("headerImageUrl")
+                    ),
+                    "modifierGroups": modifier_groups,
+                })
+    return categories, products
+
 def get_kiosk_nomenclature(organization_id):
     response = iiko_post(
         "/api/1/nomenclature",
@@ -984,13 +1098,13 @@ def receipt_analytics():
 @app.route("/kiosk-menu")
 def kiosk_menu():
     point = request.args.get("point", "Arai").strip()
-    base_url = None
-    token = None
+    requested_menu = request.args.get("menu", "Kiosk Арай").strip()
     try:
         department, available_departments = find_department(point)
         if not department:
             return jsonify({
                 "success": False,
+                "code": "POINT_NOT_FOUND",
                 "message": f"Point '{point}' not found",
                 "availablePoints": [
                     {"code": d.get("code"), "name": d.get("name")}
@@ -998,47 +1112,58 @@ def kiosk_menu():
                 ],
             }), 404
 
-        # For the self-service kiosk we deliberately read the BASE sale price
-        # from iikoServer (defaultSalePrice). This is the same base price visible
-        # in the iiko nomenclature card and is separate from delivery/web prices.
-        base_url, token = iiko_server_auth()
-        raw_products = iiko_server_products(base_url, token)
+        organization_id = department["organizationId"]
+        menus_payload = get_external_menus(organization_id)
+        external_menus = menus_payload.get("externalMenus", []) or []
 
-        products = []
-        for product in raw_products:
-            if product.get("deleted"):
-                continue
-            raw_price = product.get("defaultSalePrice")
-            try:
-                base_price = float(raw_price)
-            except (TypeError, ValueError):
-                continue
-            if base_price <= 0:
-                continue
-            products.append({
-                "id": product.get("id"),
-                "name": product.get("name"),
-                "code": product.get("code"),
-                "num": product.get("num"),
-                "type": product.get("type"),
-                "parentGroup": product.get("parent"),
-                "description": product.get("description"),
-                "basePrice": round(base_price, 2),
-                "price": round(base_price, 2),
-                "defaultIncludedInMenu": product.get("defaultIncludedInMenu"),
+        selected = next(
+            (
+                menu for menu in external_menus
+                if (menu.get("name") or "").strip().casefold() == requested_menu.casefold()
+            ),
+            None,
+        )
+        if not selected:
+            response = jsonify({
+                "success": False,
+                "code": "EXTERNAL_MENU_NOT_FOUND",
+                "message": f"External menu '{requested_menu}' is not available for point '{point}' via iikoCloud yet.",
+                "point": {
+                    "code": department.get("code"),
+                    "name": department.get("name"),
+                    "organizationId": organization_id,
+                },
+                "requestedMenu": requested_menu,
+                "availableMenus": [
+                    {"id": m.get("id"), "name": m.get("name")}
+                    for m in external_menus
+                ],
+                "hint": "Assign this external menu to the Arai restaurant in iikoWeb and make it active for API access.",
             })
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Cache-Control"] = "no-store"
+            return response, 404
+
+        menu_data = get_external_menu_by_id(selected.get("id"), organization_id)
+        categories, products = normalize_external_menu(menu_data, organization_id)
 
         response = jsonify({
             "success": True,
-            "source": "iikoServer defaultSalePrice",
-            "priceType": "BASE",
-            "priceLabel": "Базовая цена iiko",
+            "source": "iikoCloud external menu",
             "point": {
                 "code": department.get("code"),
                 "name": department.get("name"),
-                "organizationId": department.get("organizationId"),
+                "organizationId": organization_id,
             },
+            "menu": {
+                "id": selected.get("id"),
+                "name": selected.get("name"),
+                "description": menu_data.get("description"),
+                "revision": menu_data.get("revision"),
+            },
+            "categories": categories,
             "products": products,
+            "priceCategories": menus_payload.get("priceCategories", []) or [],
         })
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Cache-Control"] = "no-store"
@@ -1063,9 +1188,6 @@ def kiosk_menu():
             "code": "KIOSK_MENU_ERROR",
             "message": str(error),
         }), 500
-    finally:
-        if base_url and token:
-            iiko_server_logout(base_url, token)
 
 
 @app.route("/analytics")
