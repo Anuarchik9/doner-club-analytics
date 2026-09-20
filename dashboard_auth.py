@@ -218,7 +218,16 @@ def install_auth(app):
     @app.before_request
     def _protect_dashboard():
         path = request.path
-        if path in {"/login", "/logout", "/healthz", "/static/favicon.svg"} or path.startswith("/telegram/webhook/"):
+        public_kiosk_paths = {
+            "/kiosk",
+            "/kiosk-menu",
+            "/static/kiosk-preview.html",
+        }
+        if (
+            path in {"/login", "/logout", "/healthz", "/static/favicon.svg"}
+            or path in public_kiosk_paths
+            or path.startswith("/telegram/webhook/")
+        ):
             return None
 
         if session.get("dc_authenticated"):
@@ -245,11 +254,20 @@ def install_auth(app):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-            "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-        )
+        if request.path in {"/kiosk", "/static/kiosk-preview.html"}:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https://raw.githubusercontent.com; "
+                "connect-src 'self'; frame-ancestors 'none'; "
+                "base-uri 'self'; form-action 'self'"
+            )
+        else:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+            )
         if request.path != "/healthz":
             response.headers["Cache-Control"] = "no-store, private"
 
