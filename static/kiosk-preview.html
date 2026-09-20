@@ -513,7 +513,7 @@ function recommendedProducts(){
     return Number(a.price||0)-Number(b.price||0);
   });
 
-  return pool.slice(0,9);
+  return pool;
 }
 function cartThumbHtml(x){
   if(x.imageUrl){
@@ -521,13 +521,14 @@ function cartThumbHtml(x){
   }
   return '<div class="cartThumbFallback">DC</div>';
 }
-function recommendCardHtml(p){
+function recommendCardHtml(p,index){
   var image=p.imageUrl
     ? '<img src="'+esc(p.imageUrl)+'" alt="" onerror="this.style.display=\'none\'">'
     : '';
+  var badge=index<4?'<div class="recommendBadge">'+t('Популярное','Танымал')+'</div>':'';
   return '<article class="recommendCard" data-rec-card="'+esc(p.id)+'">'+
     '<div class="recommendPhoto">'+image+'</div>'+
-    '<div class="recommendBadge">'+t('Популярное','Танымал')+'</div>'+
+    badge+
     '<button class="recommendAdd" data-rec-add="'+esc(p.id)+'" aria-label="'+t('Добавить','Қосу')+'">+</button>'+
     '<div class="recommendBody"><div class="recommendPrice">'+money(p.price)+'</div><div class="recommendName">'+esc(p.name)+'</div></div>'+
   '</article>';
@@ -568,7 +569,7 @@ function paintCartLines(){
   recommend.innerHTML=recs.length
     ? '<div class="recommendTitle">'+t('Рекомендовано для вас','Сізге ұсынылады')+'</div>'+
       '<div class="recommendSub">'+t('Можно сразу дозаказать напиток, фри, стрипсы, десерт или дополнение.','Сусын, фри, стрипс, десерт немесе қоспаны бірден қоса аласыз.')+'</div>'+
-      '<div class="recommendGrid">'+recs.map(recommendCardHtml).join('')+'</div>'
+      '<div class="recommendGrid">'+recs.map(function(p,index){return recommendCardHtml(p,index)}).join('')+'</div>'
     : '';
 
   el.querySelectorAll('[data-plus]').forEach(function(b){b.onclick=function(){
