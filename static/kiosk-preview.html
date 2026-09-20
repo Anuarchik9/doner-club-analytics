@@ -48,6 +48,7 @@
 <script>
 var lang='ru', categories=[], products=[], activeCat=null, cart=[], selected=null, menuReady=false, retryTimer=null;
 var CAT_KZ={'Комбо':'Комбо','Донер':'Донерлер','Донеры':'Донерлер','Бар':'Сусындар','Напитки':'Сусындар','Чаи':'Шай','Сладости':'Тәттілер','Дополнительное':'Қосымша','Дополнительно':'Қосымша','Батоны':'Батондар','Фри':'Фри','Стрипсы':'Стрипстер','Акции':'Науқандар'};
+var MENU_CACHE_KEY='donerclub-kiosk-arai-menu-v1', MENU_CACHE_TTL=10*60*1000;
 function t(ru,kz){return lang==='ru'?ru:kz}
 function money(n){return Number(n||0).toLocaleString('ru-RU')+' ₸'}
 function categoryName(c){return lang==='ru'?c.name:(CAT_KZ[c.name]||c.name)}
@@ -56,33 +57,88 @@ function count(){return cart.reduce(function(s,x){return s+x.q},0)}
 function total(){return cart.reduce(function(s,x){return s+x.q*x.unitPrice},0)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})}
 
-async function loadMenu(){
-  var status=document.getElementById('status');
-  status.className='status';
-  status.textContent='Kiosk Арай · загружаю iiko…';
+function readMenuCache(){
   try{
-    var r=await fetch('/kiosk-menu?point=Arai&menu='+encodeURIComponent('Kiosk Арай')+'&_='+Date.now(),{cache:'no-store'});
+    var raw=localStorage.getItem(MENU_CACHE_KEY);
+    if(!raw)return null;
+    var cached=JSON.parse(raw);
+    if(!cached||!cached.savedAt||!cached.data)return null;
+    return cached;
+  }catch(e){
+    return null;
+  }
+}
+function writeMenuCache(data){
+  try{
+    localStorage.setItem(MENU_CACHE_KEY,JSON.stringify({
+      savedAt:Date.now(),
+      data:data
+    }));
+  }catch(e){}
+}
+function applyMenuData(data){
+  categories=data.categories||[];
+  products=data.products||[];
+  activeCat='all';
+  menuReady=true;
+  var status=document.getElementById('status');
+  status.className='status ok';
+  status.textContent='Kiosk Арай · iiko · '+products.length+' поз.';
+  document.getElementById('setup').innerHTML='';
+  paint();
+}
+function scheduleMenuRefresh(delay){
+  if(retryTimer){clearTimeout(retryTimer);retryTimer=null;}
+  retryTimer=setTimeout(function(){loadMenu(true)},Math.max(1000,delay));
+}
+async function loadMenu(force){
+  var status=document.getElementById('status');
+  var cached=readMenuCache();
+
+  if(!force&&cached){
+    var age=Date.now()-cached.savedAt;
+    if(age<MENU_CACHE_TTL){
+      applyMenuData(cached.data);
+      scheduleMenuRefresh(MENU_CACHE_TTL-age);
+      return;
+    }
+  }
+
+  if(!products.length){
+    status.className='status';
+    status.textContent='Kiosk Арай · загружаю iiko…';
+  }else{
+    status.className='status ok';
+    status.textContent='Kiosk Арай · обновляю меню…';
+  }
+
+  try{
+    var r=await fetch('/kiosk-menu?point=Arai&menu='+encodeURIComponent('Kiosk Арай'),{cache:'no-store'});
     var data=await r.json();
     if(!r.ok||!data.success) throw data;
-    if(retryTimer){clearTimeout(retryTimer);retryTimer=null;}
-    categories=data.categories||[];
-    products=data.products||[];
-    activeCat='all';
-    menuReady=true;
-    status.className='status ok';
-    status.textContent='Kiosk Арай · iiko · '+products.length+' поз.';
-    document.getElementById('setup').innerHTML='';
-    paint();
+
+    writeMenuCache(data);
+    applyMenuData(data);
+    scheduleMenuRefresh(MENU_CACHE_TTL);
   }catch(e){
+    if(cached&&cached.data){
+      applyMenuData(cached.data);
+      status.className='status ok';
+      status.textContent='Kiosk Арай · сохранённое меню · '+products.length+' поз.';
+      scheduleMenuRefresh(60*1000);
+      return;
+    }
+
     menuReady=false;
     status.className='status err';
     status.textContent='Kiosk Арай · не доступно через API';
     var names=(e&&e.availableMenus||[]).map(function(x){return x.name}).filter(Boolean);
     document.getElementById('setup').innerHTML='<div class="setup"><b>'+t('Меню создано, но iikoCloud пока его не отдаёт терминалу.','Мәзір жасалды, бірақ iikoCloud оны терминалға әлі бермейді.')+'</b><br>'+t('В iikoWeb для ресторана Арай нужно назначить внешнее меню «Kiosk Арай» и сделать его активным.','iikoWeb ішінде Арай мейрамханасына «Kiosk Арай» сыртқы мәзірін тағайындап, оны белсенді ету керек.')+(names.length?'<br><br>'+t('Сейчас API видит: ','API қазір көреді: ')+esc(names.join(', ')):'')+'</div>';
     categories=[];products=[];paint();
-    retryTimer=setTimeout(loadMenu,7000);
+    scheduleMenuRefresh(7000);
   }
 }
+
 function productQty(p){
   return cart.reduce(function(sum,x){
     return sum+(x.productId===p.id?x.q:0);
@@ -398,7 +454,7 @@ document.getElementById('ruBtn').onclick=function(){lang='ru';paint()};
 document.getElementById('kzBtn').onclick=function(){lang='kz';paint()};
 document.getElementById('cartHead').onclick=openCart;
 document.getElementById('checkout').onclick=openCart;
-document.getElementById('status').onclick=loadMenu;
+document.getElementById('status').onclick=function(){loadMenu(true)};
 paint();loadMenu();
 </script>
 </body></html>
