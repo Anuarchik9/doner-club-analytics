@@ -204,6 +204,34 @@ def get_products_map(force_refresh=False):
         raise last_error
 
 
+
+def get_kiosk_nomenclature(organization_id):
+    response = iiko_post(
+        "/api/1/nomenclature",
+        {"organizationId": organization_id, "startRevision": 0},
+        timeout=45,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def kiosk_product_price(product):
+    prices = []
+    for size_price in product.get("sizePrices", []) or []:
+        price_info = size_price.get("price") or {}
+        current_price = price_info.get("currentPrice")
+        if current_price is None:
+            continue
+        try:
+            price_value = float(current_price)
+        except (TypeError, ValueError):
+            continue
+        prices.append({
+            "sizeId": size_price.get("sizeId"),
+            "price": round(price_value, 2),
+        })
+    return prices
+
 def document_date(document, fallback):
     raw = document.get("date") or document.get("dateCreated") or fallback
     if isinstance(raw, str) and len(raw) >= 10:
@@ -934,6 +962,85 @@ def receipt_analytics():
     except Exception as error:
         return jsonify({"success": False, "code": "OLAP_ERROR", "message": str(error)}), 500
 
+
+
+@app.route("/kiosk-menu")
+def kiosk_menu():
+    try:
+        point = request.args.get("point", "Arai").strip()
+        department, available_departments = find_department(point)
+        if not department:
+            return jsonify({
+                "success": False,
+                "message": f"Point '{point}' not found",
+                "availablePoints": [
+                    {"code": d.get("code"), "name": d.get("name")}
+                    for d in available_departments
+                ],
+            }), 404
+
+        organization_id = department["organizationId"]
+        data = get_kiosk_nomenclature(organization_id)
+
+        products = []
+        for product in data.get("products", []) or []:
+            size_prices = kiosk_product_price(product)
+            if not size_prices:
+                continue
+            products.append({
+                "id": product.get("id"),
+                "name": product.get("name"),
+                "code": product.get("code"),
+                "type": product.get("type"),
+                "parentGroup": product.get("parentGroup"),
+                "description": product.get("description"),
+                "imageLinks": product.get("imageLinks") or [],
+                "sizePrices": size_prices,
+                "price": size_prices[0]["price"],
+            })
+
+        groups = [
+            {
+                "id": group.get("id"),
+                "name": group.get("name"),
+                "parentGroup": group.get("parentGroup"),
+                "isGroupModifier": group.get("isGroupModifier"),
+            }
+            for group in (data.get("groups", []) or [])
+        ]
+
+        return jsonify({
+            "success": True,
+            "source": "iikoCloud /api/1/nomenclature",
+            "point": {
+                "code": department.get("code"),
+                "name": department.get("name"),
+                "organizationId": organization_id,
+            },
+            "revision": data.get("revision"),
+            "groups": groups,
+            "products": products,
+        })
+    except requests.Timeout:
+        return jsonify({
+            "success": False,
+            "code": "IIKO_TIMEOUT",
+            "message": "iiko did not answer in time.",
+        }), 504
+    except requests.HTTPError as error:
+        response = error.response
+        return jsonify({
+            "success": False,
+            "code": "IIKO_HTTP_ERROR",
+            "statusCode": response.status_code if response is not None else None,
+            "details": response.text[:1500] if response is not None else str(error),
+        }), 502
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "code": "KIOSK_MENU_ERROR",
+            "message": str(error),
+        }), 500
 
 @app.route("/analytics")
 def analytics():
