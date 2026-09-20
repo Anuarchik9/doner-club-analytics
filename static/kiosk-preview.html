@@ -44,7 +44,7 @@
 </div>
 <div id="modalRoot"></div>
 <script>
-var lang='ru', categories=[], products=[], activeCat=null, cart=[], selected=null, menuReady=false;
+var lang='ru', categories=[], products=[], activeCat=null, cart=[], selected=null, menuReady=false, retryTimer=null;
 var CAT_KZ={'Комбо':'Комбо','Донер':'Донерлер','Донеры':'Донерлер','Бар':'Сусындар','Напитки':'Сусындар','Чаи':'Шай','Сладости':'Тәттілер','Дополнительное':'Қосымша','Дополнительно':'Қосымша','Батоны':'Батондар','Фри':'Фри','Стрипсы':'Стрипстер','Акции':'Науқандар'};
 function t(ru,kz){return lang==='ru'?ru:kz}
 function money(n){return Number(n||0).toLocaleString('ru-RU')+' ₸'}
@@ -62,6 +62,7 @@ async function loadMenu(){
     var r=await fetch('/kiosk-menu?point=Arai&menu='+encodeURIComponent('Kiosk Арай')+'&_='+Date.now(),{cache:'no-store'});
     var data=await r.json();
     if(!r.ok||!data.success) throw data;
+    if(retryTimer){clearTimeout(retryTimer);retryTimer=null;}
     categories=data.categories||[];
     products=data.products||[];
     activeCat=categories[0]&&categories[0].id;
@@ -77,6 +78,7 @@ async function loadMenu(){
     var names=(e&&e.availableMenus||[]).map(function(x){return x.name}).filter(Boolean);
     document.getElementById('setup').innerHTML='<div class="setup"><b>'+t('Меню создано, но iikoCloud пока его не отдаёт терминалу.','Мәзір жасалды, бірақ iikoCloud оны терминалға әлі бермейді.')+'</b><br>'+t('В iikoWeb для ресторана Арай нужно назначить внешнее меню «Kiosk Арай» и сделать его активным.','iikoWeb ішінде Арай мейрамханасына «Kiosk Арай» сыртқы мәзірін тағайындап, оны белсенді ету керек.')+(names.length?'<br><br>'+t('Сейчас API видит: ','API қазір көреді: ')+esc(names.join(', ')):'')+'</div>';
     categories=[];products=[];paint();
+    retryTimer=setTimeout(loadMenu,7000);
   }
 }
 function paint(){
@@ -170,6 +172,7 @@ document.getElementById('ruBtn').onclick=function(){lang='ru';paint()};
 document.getElementById('kzBtn').onclick=function(){lang='kz';paint()};
 document.getElementById('cartHead').onclick=openCart;
 document.getElementById('checkout').onclick=openCart;
+document.getElementById('status').onclick=loadMenu;
 paint();loadMenu();
 </script>
 </body></html>
