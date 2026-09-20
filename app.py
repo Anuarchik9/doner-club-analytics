@@ -92,11 +92,11 @@ def get_iiko_kiosk_token(force_refresh=False):
     with _kiosk_token_lock:
         if not force_refresh and _cache_valid(_kiosk_token_cache):
             return _kiosk_token_cache["value"]
-        app_id = os.environ.get("IIKO_KIOSK_APP_ID")
-        client_secret = os.environ.get("IIKO_KIOSK_CLIENT_SECRET")
+        app_id = os.environ.get("IIKO_KIOSK_APP_ID") or os.environ.get("IIKO_APP_ID")
+        client_secret = os.environ.get("IIKO_KIOSK_CLIENT_SECRET") or os.environ.get("IIKO_CLIENT_SECRET")
         api_key = os.environ.get("IIKO_KIOSK_API_KEY")
         if not all([app_id, client_secret, api_key]):
-            raise RuntimeError("Dedicated iiko Kiosk API credentials are not configured")
+            raise RuntimeError("Dedicated iiko Kiosk API key is not configured")
         response = requests.post(
             f"{IIKO_BASE_URL}/api/v2/access_token",
             json={"appId": app_id, "clientSecret": client_secret, "apiKey": api_key},
@@ -1347,14 +1347,14 @@ def kiosk_test_order():
 
     try:
         if not all([
-            os.environ.get("IIKO_KIOSK_APP_ID"),
-            os.environ.get("IIKO_KIOSK_CLIENT_SECRET"),
             os.environ.get("IIKO_KIOSK_API_KEY"),
+            os.environ.get("IIKO_KIOSK_APP_ID") or os.environ.get("IIKO_APP_ID"),
+            os.environ.get("IIKO_KIOSK_CLIENT_SECRET") or os.environ.get("IIKO_CLIENT_SECRET"),
         ]):
             return jsonify({
                 "success": False,
                 "code": "KIOSK_API_NOT_CONFIGURED",
-                "message": "Test order was NOT sent. Configure a separate Doner Club Kiosk iikoCloud API integration first.",
+                "message": "Test order was NOT sent. Configure IIKO_KIOSK_API_KEY for the Doner Club Kiosk integration first.",
             }), 503
 
         department, available_departments = find_department(point)
