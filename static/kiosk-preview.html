@@ -521,14 +521,25 @@ function recommendedProducts(){
 
   function priority(p){
     var name=(p.name||'').toLowerCase().replace(/ё/g,'е');
+    var category=(categories.find(function(c){return c.id===p.categoryId})||{}).name||'';
+    category=category.toLowerCase().replace(/ё/g,'е');
+
     if(name.indexOf('стрип')>=0)return 0;
     if(name.indexOf('картофель фри')>=0 || name==='фри' || name.indexOf(' фри')>=0)return 1;
     if(name.indexOf('медов')>=0 && name.indexOf('соус')>=0)return 2;
     if(name.indexOf('фирмен')>=0 && name.indexOf('соус')>=0)return 3;
-    if(name.indexOf('соус')>=0)return 4;
-    if(name.indexOf('pepsi')>=0 || name.indexOf('айран')>=0 || name.indexOf('lipton')>=0 || name.indexOf('mirinda')>=0 || name.indexOf('вода')>=0 || name.indexOf('пиала')>=0)return 5;
-    if(name.indexOf('пончик')>=0 || name.indexOf('десерт')>=0 || name.indexOf('слад')>=0)return 6;
-    return 7;
+
+    // After the four main popular add-ons:
+    // donut -> Chef Bubble -> teas -> garlic sauce.
+    if(name.indexOf('пончик')>=0)return 4;
+    if(name.indexOf('шеф bubble')>=0 || name.indexOf('chef bubble')>=0 || name.indexOf('bubble')>=0)return 5;
+    if(category.indexOf('чай')>=0 || name.indexOf('чай')>=0 || name.indexOf('lipton')>=0)return 6;
+    if(name.indexOf('чесноч')>=0 && name.indexOf('соус')>=0)return 7;
+
+    if(name.indexOf('соус')>=0)return 8;
+    if(name.indexOf('pepsi')>=0 || name.indexOf('айран')>=0 || name.indexOf('mirinda')>=0 || name.indexOf('вода')>=0 || name.indexOf('пиала')>=0 || name.indexOf('ava')>=0 || name.indexOf('да да')>=0 || name.indexOf('кинза')>=0)return 9;
+    if(name.indexOf('десерт')>=0 || name.indexOf('слад')>=0)return 10;
+    return 11;
   }
 
   pool.sort(function(a,b){
