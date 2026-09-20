@@ -956,6 +956,8 @@ def kiosk():
 
 @app.route("/")
 def home():
+    if os.environ.get("APP_MODE", "").strip().lower() == "kiosk":
+        return app.send_static_file("kiosk-preview.html")
     return jsonify({
         "service": "Doner Club Analytics",
         "status": "online",
