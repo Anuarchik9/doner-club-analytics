@@ -764,7 +764,14 @@ async function sendTestIikoOrder(){
       (info.id?'<br>'+t('ID заказа: ','Тапсырыс ID: ')+esc(info.id):'')+
       '<br>'+t('Теперь проверь кассу и кухонный принтер. Корзина специально не очищена.','Енді касса мен ас үй принтерін тексер. Себет әдейі тазаланған жоқ.')+'</div>';
   }catch(error){
-    result.innerHTML='<div class="testResult bad"><b>'+t('iiko не принял тестовый заказ.','iiko тест тапсырысты қабылдамады.')+'</b><br>'+esc(error.message||error.details||error.code||'Неизвестная ошибка')+'</div>';
+    var message=error.message||error.details||error.code||'Неизвестная ошибка';
+    if(error.code==='KIOSK_API_NOT_CONFIGURED'){
+      message=t(
+        'Тестовая отправка временно заблокирована: нужно подключить отдельную iikoCloud-интеграцию «Doner Club Kiosk». Это сделано специально, чтобы заказы киоска больше не помечались источником «Analytics».',
+        'Тест жіберу уақытша бұғатталған: бөлек «Doner Club Kiosk» iikoCloud интеграциясын қосу керек. Бұл киоск тапсырыстары енді «Analytics» көзімен белгіленбеуі үшін жасалды.'
+      );
+    }
+    result.innerHTML='<div class="testResult bad"><b>'+t('Тестовый заказ не отправлен.','Тест тапсырыс жіберілген жоқ.')+'</b><br>'+esc(message)+'</div>';
   }finally{
     button.disabled=false;
     button.textContent=t('Отправить тестовый заказ в iiko','Тест тапсырысты iiko-ға жіберу');
