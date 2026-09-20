@@ -1,3 +1,5 @@
+import os
+
 # The dashboard makes several independent iiko/iikoCloud requests in parallel.
 # gthread lets one Render instance process those network-bound requests concurrently
 # instead of queueing them one-by-one behind a single synchronous worker.
@@ -9,6 +11,10 @@ keepalive = 5
 
 
 def post_worker_init(worker):
+    if os.environ.get("APP_MODE", "").strip().lower() == "kiosk":
+        worker.log.info("Kiosk mode: skipping analytics auth and dashboard patches")
+        return
+
     from dashboard_auth import install_auth
     from auth_allowed_users import install_auth_allowlist_patch
     from management_features import install_management_features
