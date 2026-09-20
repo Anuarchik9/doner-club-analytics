@@ -246,15 +246,32 @@ def _menu_price(prices, organization_id):
 
 
 def _normalize_modifier_item(item, organization_id):
-    sizes = item.get("itemSizes") or []
-    size = next((s for s in sizes if s.get("isDefault")), None) or (sizes[0] if sizes else {})
+    # Modifier items in iiko external menu use their own compact schema:
+    # prices/restrictions live directly on the modifier item (not only in itemSizes).
+    prices = item.get("prices") or []
+    image_url = item.get("buttonImage") or item.get("buttonImageUrl")
+    restrictions = item.get("restrictions") or {}
+
+    # Keep compatibility with alternate/full MenuItem-shaped modifier payloads.
+    if not prices:
+        sizes = item.get("itemSizes") or []
+        size = next((s for s in sizes if s.get("isDefault")), None) or (sizes[0] if sizes else {})
+        prices = size.get("prices") or []
+        image_url = image_url or size.get("buttonImageUrl")
+        if not restrictions:
+            restrictions = size.get("restrictions") or {}
+
     return {
         "id": item.get("itemId"),
         "sku": item.get("sku"),
         "name": item.get("name"),
-        "price": _menu_price(size.get("prices"), organization_id) or 0,
-        "imageUrl": size.get("buttonImageUrl"),
-        "isHidden": bool(item.get("isHidden") or size.get("isHidden")),
+        "price": _menu_price(prices, organization_id) or 0,
+        "imageUrl": image_url,
+        "isHidden": bool(item.get("isHidden")),
+        "minQuantity": restrictions.get("minQuantity") or 0,
+        "maxQuantity": restrictions.get("maxQuantity") or 0,
+        "freeQuantity": restrictions.get("freeQuantity") or 0,
+        "byDefault": restrictions.get("byDefault") or 0,
     }
 
 
@@ -285,11 +302,22 @@ def normalize_external_menu(menu_data, organization_id):
                     continue
                 modifier_groups = []
                 for group in size.get("itemModifierGroups", []) or []:
+                    group_restrictions = group.get("restrictions") or {}
                     modifier_groups.append({
-                        "id": group.get("id"),
+                        "id": group.get("id") or group.get("itemGroupId"),
                         "name": group.get("name"),
-                        "minQuantity": group.get("minQuantity") or 0,
-                        "maxQuantity": group.get("maxQuantity") or 0,
+                        "minQuantity": (
+                            group.get("minQuantity")
+                            if group.get("minQuantity") is not None
+                            else group_restrictions.get("minQuantity") or 0
+                        ),
+                        "maxQuantity": (
+                            group.get("maxQuantity")
+                            if group.get("maxQuantity") is not None
+                            else group_restrictions.get("maxQuantity") or 0
+                        ),
+                        "freeQuantity": group_restrictions.get("freeQuantity") or 0,
+                        "byDefault": group_restrictions.get("byDefault") or 0,
                         "items": [
                             _normalize_modifier_item(modifier, organization_id)
                             for modifier in (group.get("items") or [])
