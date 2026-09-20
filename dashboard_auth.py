@@ -258,7 +258,7 @@ def install_auth(app):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; style-src 'self' 'unsafe-inline'; "
                 "script-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: https://raw.githubusercontent.com; "
+                "img-src 'self' data: https:; "
                 "connect-src 'self'; frame-ancestors 'none'; "
                 "base-uri 'self'; form-action 'self'"
             )
