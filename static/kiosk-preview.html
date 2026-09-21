@@ -818,14 +818,14 @@ function renderPhoneEntry(){
   continueBtn.disabled=digits.length!==10;
   hint.className='phoneHint';
   hint.textContent=digits.length===10
-    ? t('Номер готов. Бонус будет привязан к этому номеру.','Нөмір дайын. Бонус осы нөмірге тіркеледі.')
+    ? t('Номер готов. Скидка 5% будет привязана к этому номеру.','Нөмір дайын. 5% жеңілдік осы нөмірге тіркеледі.')
     : t('Введите 10 цифр после +7','+7-ден кейін 10 сан енгізіңіз');
 }
 function openPhoneEntry(){
   document.getElementById('modalRoot').innerHTML=
     '<div class="overlay"><div class="modal phoneModal">'+
       '<h2>'+t('Ваш номер телефона','Телефон нөміріңіз')+'</h2>'+
-      '<div class="phoneGift"><div class="phoneGiftIcon">₸</div><div>'+t('Введите номер телефона и получите <b>200 ₸ бонусов</b> на баланс для следующего заказа.','Телефон нөміріңізді енгізіп, келесі тапсырысқа балансқа <b>200 ₸ бонус</b> алыңыз.')+'</div></div>'+
+      '<div class="phoneGift"><div class="phoneGiftIcon">₸</div><div>'+t('Введите номер телефона и получите <b>скидку 5%</b> на первый заказ через киоск.','Телефон нөміріңізді енгізіп, киоск арқылы алғашқы тапсырысқа <b>5% жеңілдік</b> алыңыз.')+'</div></div>'+
       '<div class="phoneInputWrap"><div class="phoneInputLabel">'+t('Номер телефона','Телефон нөмірі')+'</div><div id="phoneDisplay" class="phoneDisplay">+7</div><div id="phoneHint" class="phoneHint"></div></div>'+
       '<div class="phoneKeypad">'+
         ['1','2','3','4','5','6','7','8','9','','0','⌫'].map(function(key){return key?'<button class="phoneKey'+(key==='⌫'?' delete':'')+'" data-phone-key="'+key+'">'+key+'</button>':'<div></div>'}).join('')+
