@@ -11,10 +11,6 @@ keepalive = 5
 
 
 def post_worker_init(worker):
-    if os.environ.get("APP_MODE", "").strip().lower() == "kiosk":
-        worker.log.info("Kiosk mode: skipping analytics auth and dashboard patches")
-        return
-
     from dashboard_auth import install_auth
     from auth_allowed_users import install_auth_allowlist_patch
     from management_features import install_management_features
