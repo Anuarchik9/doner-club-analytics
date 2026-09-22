@@ -80,6 +80,60 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(self.client.get(path+'?from=invalid&to=invalid').status_code, 400)
 
 
+
+    def test_arai_number_alone_is_not_inventory(self):
+        from revisions_data_v2 import _looks_like_inventory
+
+        names = {
+            'transaction': 'TransactionType',
+            'document': 'Document',
+            'accounts': ['Account.Name'],
+        }
+        unrelated = {
+            'TransactionType': 'STORE',
+            'Document': 'Arai0619',
+            'Account.Name': 'Расход продуктов',
+        }
+        real_inventory = {
+            'TransactionType': 'STORE',
+            'Document': 'Arai0112',
+            'Account.Name': 'Недостача инвентаризации',
+        }
+        self.assertFalse(_looks_like_inventory('arai_kitchen', unrelated, names))
+        self.assertTrue(_looks_like_inventory('arai_kitchen', real_inventory, names))
+
+    def test_inventory_export_parser_keeps_status(self):
+        from revisions_data_v7 import _parse_inventory_export
+
+        xml = '''
+        <documents>
+          <document>
+            <documentNumber>Arai0114</documentNumber>
+            <dateIncoming>2026-09-18T09:00:00</dateIncoming>
+            <status>NEW</status>
+            <storeId>store-arai</storeId>
+            <items>
+              <item><productId>p1</productId></item>
+            </items>
+          </document>
+          <document>
+            <documentNumber>Arai0112</documentNumber>
+            <dateIncoming>2026-09-18T09:00:00</dateIncoming>
+            <status>PROCESSED</status>
+            <storeId>store-arai</storeId>
+            <items>
+              <item><productId>p2</productId></item>
+            </items>
+          </document>
+        </documents>
+        '''
+        docs = _parse_inventory_export(xml, {'p1': 'Pepsi 0,5л', 'p2': 'Шаурма Куриная Сырая'})
+        self.assertEqual(len(docs), 2)
+        self.assertEqual(docs[0]['status'], 'NEW')
+        self.assertEqual(docs[1]['status'], 'PROCESSED')
+        self.assertEqual(docs[0]['productNames'], ['Pepsi 0,5л'])
+
+
     def test_arai_revision_classifier_prefers_counter_context(self):
         from revisions_data_v2 import _arai_revision_kind, _store_matches
 
