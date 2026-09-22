@@ -487,12 +487,11 @@ def _looks_like_inventory(scope, row, names):
         if field and _marker(row.get(field)):
             return True
 
-    # 2) In this corporate database Arai inventory documents are numbered Arai####.
-    # Require a matching Arai warehouse too, so this does not classify unrelated documents.
-    document = str(row.get(names.get("document")) or "").strip() if names.get("document") else ""
-    if scope in ("arai", "arai_kitchen", "arai_counter") and re.fullmatch(r"(?i)arai\d+", document):
-        return True
-
+    # Do NOT classify a row as an inventory merely because its document number
+    # looks like Arai####. Other Arai stock/accounting documents use the same
+    # numbering style; this was the reason the dashboard invented revision dates
+    # such as 19/20 September that do not exist in the iikoChain inventory list.
+    # A real posted inventory must be confirmed by its transaction/account marker.
     return False
 
 
