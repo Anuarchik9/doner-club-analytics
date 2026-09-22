@@ -9,17 +9,108 @@ from flask import jsonify, request
 
 
 SCOPES = {
+    # Legacy API scope. Keep it for old bookmarks/scripts, but only use the
+    # physical "АРАЙ общий" warehouse. Household inventory is a separate process
+    # and must never move the "last revision" date for the sales point.
     "arai": {
-        "label": "Арай",
+        "label": "Арай · общий склад",
         "store_needles": ("арай",),
-        "store_excludes": ("цех",),
+        "store_excludes": ("цех", "хоз"),
+        "revision_kind": None,
+    },
+    "arai_kitchen": {
+        "label": "Арай · кухня",
+        "store_needles": ("арай",),
+        "store_excludes": ("цех", "хоз"),
+        "revision_kind": "kitchen",
+    },
+    "arai_counter": {
+        "label": "Арай · напитки и товары точки",
+        "store_needles": ("арай",),
+        "store_excludes": ("цех", "хоз"),
+        "revision_kind": "counter",
     },
     "workshop": {
         "label": "Цех",
         "store_needles": ("цех",),
         "store_excludes": (),
+        "revision_kind": None,
     },
 }
+
+# Arai uses the same physical warehouse for two different responsibility zones.
+# The kitchen inventory is the compact raw-material count. The cashier/point
+# inventory contains drinks and items sold/issued together with the doner.
+# Strong point markers win over kitchen markers because the wider point revision
+# may legitimately contain meat/fries too (as seen in Arai0110).
+ARAI_COUNTER_MARKERS = (
+    "ava",
+    "пиала",
+    "piala",
+    "pepsi",
+    "mirinda",
+    "7 up",
+    "7up",
+    "вода",
+    "айран",
+    "да да",
+    "да-да",
+    "kinza",
+    "кинза",
+    "салфет",
+    "пакет",
+    "ложк",
+    "зубочист",
+    "стакан",
+    "крышк",
+    "трубоч",
+    "соус",
+    "лажжан",
+    "лаваш",
+)
+ARAI_KITCHEN_MARKERS = (
+    "шаурм",
+    "говяж",
+    "курин",
+    "картофель фри",
+    "картофель фри очищ",
+)
+
+
+def _norm_product(value):
+    text = str(value or "").strip().lower().replace("ё", "е")
+    text = re.sub(r"[^0-9a-zа-я]+", " ", text)
+    return " ".join(text.split())
+
+
+def _arai_revision_kind(product_names):
+    normalized = [_norm_product(value) for value in product_names if str(value or "").strip()]
+    if not normalized:
+        return None
+
+    counter_hits = sum(
+        1 for name in normalized
+        if any(marker in name for marker in ARAI_COUNTER_MARKERS)
+    )
+    kitchen_hits = sum(
+        1 for name in normalized
+        if any(marker in name for marker in ARAI_KITCHEN_MARKERS)
+    )
+
+    if counter_hits:
+        return "counter"
+    if kitchen_hits:
+        return "kitchen"
+
+    # Wide inventories on the general Arai warehouse are point/cashier counts
+    # even when their individual product names do not hit the known vocabulary.
+    if len(set(normalized)) >= 8:
+        return "counter"
+    return None
+
+
+def _scope_revision_kind(scope_key):
+    return (SCOPES.get(scope_key) or {}).get("revision_kind")
 
 # Different iiko builds expose inventory reconciliation under different labels.
 # We therefore inspect transaction type, document and accounting fields, not only TransactionType.
@@ -399,7 +490,7 @@ def _looks_like_inventory(scope, row, names):
     # 2) In this corporate database Arai inventory documents are numbered Arai####.
     # Require a matching Arai warehouse too, so this does not classify unrelated documents.
     document = str(row.get(names.get("document")) or "").strip() if names.get("document") else ""
-    if scope == "arai" and re.fullmatch(r"(?i)arai\d+", document):
+    if scope in ("arai", "arai_kitchen", "arai_counter") and re.fullmatch(r"(?i)arai\d+", document):
         return True
 
     return False
