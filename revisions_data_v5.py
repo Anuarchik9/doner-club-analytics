@@ -53,7 +53,6 @@ def _build(scope, period, rows, names, diagnostics):
     # so document-level context is required.
     required_kind = _scope_revision_kind(scope)
     candidate_products = defaultdict(set)
-    candidate_rows = defaultdict(int)
     if required_kind:
         for row in rows:
             if not isinstance(row, dict):
@@ -68,7 +67,6 @@ def _build(scope, period, rows, names, diagnostics):
             key = (date_value, document_label, store)
             if product_name:
                 candidate_products[key].add(product_name)
-            candidate_rows[key] += 1
 
     for row in rows:
         if not isinstance(row, dict):
@@ -76,9 +74,6 @@ def _build(scope, period, rows, names, diagnostics):
         store = _row_store(scope, row, names["stores"])
         if not store or not _looks_like_inventory(scope, row, names):
             continue
-
-        matched_rows += 1
-        matched_stores.add(store)
 
         date_value = str(row.get(names["date"]) or "")[:10] or "Без даты"
         document = str(row.get(names.get("document")) or "").strip() if names.get("document") else ""
@@ -92,6 +87,8 @@ def _build(scope, period, rows, names, diagnostics):
                     excluded_documents.add(document)
                 continue
 
+        matched_rows += 1
+        matched_stores.add(store)
         if document:
             matched_documents.add(document)
 
