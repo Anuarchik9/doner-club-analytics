@@ -16,7 +16,8 @@
     .revision-row{grid-template-columns:120px minmax(0,1fr) auto!important;align-items:start!important}
     .rev-list-block{display:grid;gap:6px;min-width:0}.rev-list-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-size:11px;line-height:1.35}.rev-list-item span:first-child{color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rev-list-item b{white-space:nowrap}.rev-list-item.neg b,.rev-list-item.repeat b{color:#ff8b8b}.rev-list-item.pos b{color:#8be0b2}.rev-empty{color:#777;font-size:11px}.rev-small{font-size:10px;color:#777;margin-top:4px;line-height:1.35}.rev-list-extra[hidden]{display:none}.rev-list-extra{display:grid;gap:6px}.rev-more{justify-self:start;margin-top:5px;padding:6px 10px;border:1px solid #343434;border-radius:999px;background:#0b0b0b;color:#ddd;font:700 10px Inter,system-ui;cursor:pointer}.rev-more:hover{border-color:#5b4a41;color:#fff}
     .rev-quality{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}.rev-quality-card{padding:13px 15px;border:1px solid #242424;border-radius:14px;background:#0e0e0e}.rev-quality-card span{display:block;color:#777;font-size:10px;text-transform:uppercase;letter-spacing:.06em}.rev-quality-card b{display:block;margin-top:5px;font-size:18px}.rev-quality-card small{display:block;margin-top:3px;color:#777;font-size:10px;line-height:1.35}
-    @media(max-width:900px){.rev-quality{grid-template-columns:1fr 1fr}}
+    .iiko-register{margin:26px 0 4px;padding:20px;border:1px solid #292929;border-radius:20px;background:linear-gradient(160deg,#151515,#101010)}.iiko-register-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:12px}.iiko-register-head h3{margin:0;font-size:17px}.iiko-register-head p{margin:4px 0 0;color:#777;font-size:10px}.iiko-register-badge{font-size:10px;color:#9fe4bf;border:1px solid #2e4a3b;border-radius:99px;padding:6px 9px}.iiko-register-table{width:100%;border-collapse:collapse}.iiko-register-table th{padding:9px 8px;color:#777;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #292929}.iiko-register-table td{padding:10px 8px;border-bottom:1px solid #222;font-size:11px;vertical-align:top}.iiko-register-table tr:last-child td{border-bottom:0}.iiko-doc-num{font-weight:800}.iiko-doc-num.pending{color:#4e8cff}.iiko-doc-num.processed{color:#fff}.iiko-doc-items{max-width:520px;color:#b7b7b2;line-height:1.35}.iiko-doc-store{color:#9a9a95}.iiko-state{display:inline-flex;border-radius:99px;padding:4px 7px;font-size:9px;font-weight:800}.iiko-state.processed{background:#102019;color:#8be0b2;border:1px solid #294739}.iiko-state.pending{background:#10182a;color:#82a9ff;border:1px solid #2c4274}.iiko-reg-empty{padding:18px;color:#888;font-size:11px;border:1px dashed #333;border-radius:12px}
+    @media(max-width:900px){.rev-quality{grid-template-columns:1fr 1fr}.iiko-register{overflow-x:auto}.iiko-register-table{min-width:850px}}
     @media(max-width:600px){.revision-row{grid-template-columns:1fr auto!important}.revision-row>b{grid-column:1/-1}.rev-quality{grid-template-columns:1fr 1fr}.revision-history{font-size:10px}.revision-history th,.revision-history td{padding:8px 5px}}
   `;
   document.head.appendChild(style);
@@ -110,8 +111,62 @@
       <div class="rev-quality-card"><span>Документов найдено</span><b>${Number(s.documentsCount || 0).toLocaleString('ru-RU')}</b><small>Инвентаризационные документы iiko за период</small></div>`;
   }
 
+  function renderIikoRegister(data) {
+    let host = document.getElementById('iikoInventoryRegister');
+    const cards = document.querySelector('.cards');
+    if (!host && cards) {
+      host = document.createElement('section');
+      host.id = 'iikoInventoryRegister';
+      host.className = 'iiko-register';
+      cards.insertAdjacentElement('afterend', host);
+    }
+    if (!host) return;
+
+    const docs = data?.inventoryDocuments || [];
+    const exportInfo = data?.inventoryDocumentExport || {};
+    if (!docs.length) {
+      host.innerHTML = `
+        <div class="iiko-register-head"><div><h3>Документы iikoChain</h3><p>Список инвентаризаций из реестра iiko, отдельно от аналитики проводок.</p></div></div>
+        <div class="iiko-reg-empty">Прямой реестр документов iikoServer пока не вернул данные. Ниже аналитика строится только по подтверждённым проводкам инвентаризации — номер документа сам по себе больше не считается ревизией.</div>`;
+      return;
+    }
+
+    const detailMap = new Map();
+    for (const rev of data?.revisionDetails || []) {
+      for (const doc of rev.documents || []) {
+        detailMap.set(String(doc.document || ''), doc);
+      }
+    }
+
+    host.innerHTML = `
+      <div class="iiko-register-head">
+        <div><h3>Документы iikoChain</h3><p>Это зеркальный список реальных документов инвентаризации. Синие — не проведены, проведённые — источник финансовой аналитики.</p></div>
+        <span class="iiko-register-badge">iiko · ${escapeHtml(exportInfo.type || 'inventory')}</span>
+      </div>
+      <table class="iiko-register-table">
+        <thead><tr><th>Учётная дата</th><th>№ документа</th><th>Товары</th><th>Проведена</th><th>Склад</th><th>Итог расхождения</th></tr></thead>
+        <tbody>${docs.map(doc => {
+          const detail = detailMap.get(String(doc.document || ''));
+          const state = doc.status === 'PROCESSED' ? 'processed' : 'pending';
+          const stateLabel = state === 'processed' ? 'Да' : 'Нет';
+          const net = detail ? Number(detail.net || 0) : 0;
+          const netText = detail ? money(net) : '—';
+          const preview = doc.itemsPreview || ((doc.productNames || []).slice(0,4).join(', ')) || 'Состав не получен';
+          return `<tr>
+            <td><b>${dateRu(doc.date)}</b><div class="rev-small">${escapeHtml(String(doc.dateTime || '').slice(11,16))}</div></td>
+            <td><span class="iiko-doc-num ${state}">${escapeHtml(doc.document || '—')}</span></td>
+            <td class="iiko-doc-items">${escapeHtml(preview)}</td>
+            <td><span class="iiko-state ${state}">${stateLabel}</span></td>
+            <td class="iiko-doc-store">${escapeHtml(doc.store || '—')}</td>
+            <td class="${net < 0 ? 'negative' : net > 0 ? 'positive' : ''}"><b>${netText}</b></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+  }
+
   function render(data) {
     const cards = [...document.querySelectorAll('.cards .card')];
+    renderIikoRegister(data);
     const s = data.summary || {};
     setCard(cards[0], dateRu(s.lastRevision), s.revisionsCount ? `${s.revisionsCount} дат · ${s.documentsCount || 0} проведённых документов` : 'Проведённых ревизий за период нет');
     setCard(cards[1], money(s.shortage), 'Сумма отрицательных расхождений', s.shortage ? 'red' : '');
