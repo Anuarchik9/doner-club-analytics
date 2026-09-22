@@ -44,7 +44,7 @@
     if (!m) return value || '—';
     return `${monthNames[Number(m[2]) - 1]} ${m[1]}`;
   };
-  const scopes = {arai:'Арай (АРАЙ общий) + Арай (Хоз.товары АРАЙ)',workshop:'ЦЕХ Основной (Цех) + ЦЕХ Основной (Цех. Хоз.товары)'};
+  const scopes = {arai:'Арай (АРАЙ общий)',arai_kitchen:'Арай (АРАЙ общий) · кухня',arai_counter:'Арай (АРАЙ общий) · напитки и товары точки',workshop:'ЦЕХ Основной (Цех) + ЦЕХ Основной (Цех. Хоз.товары)'};
   const money = value => `${Math.round(Number(value || 0)).toLocaleString('ru-RU')} ₸`;
   const pct = value => `${Number(value || 0).toLocaleString('ru-RU',{maximumFractionDigits:1})}%`;
   const dateRu = value => {
@@ -113,7 +113,7 @@
   function render(data) {
     const cards = [...document.querySelectorAll('.cards .card')];
     const s = data.summary || {};
-    setCard(cards[0], dateRu(s.lastRevision), s.revisionsCount ? `${s.revisionsCount} дат ревизии · ${s.documentsCount || 0} документов` : 'Ревизий за период нет');
+    setCard(cards[0], dateRu(s.lastRevision), s.revisionsCount ? `${s.revisionsCount} дат · ${s.documentsCount || 0} проведённых документов` : 'Проведённых ревизий за период нет');
     setCard(cards[1], money(s.shortage), 'Сумма отрицательных расхождений', s.shortage ? 'red' : '');
     setCard(cards[2], money(s.surplus), 'Сумма положительных расхождений', s.surplus ? 'green' : '');
     setCard(cards[3], money(s.net), 'Излишки минус недостача', s.net < 0 ? 'red' : s.net > 0 ? 'green' : '');
@@ -171,7 +171,7 @@
 
   button.addEventListener('click', async () => {
     const select = $('revisionPoint');
-    const pointKey = select?.value || 'arai';
+    const pointKey = select?.value || 'arai_kitchen';
     const point = select?.selectedOptions?.[0]?.textContent?.trim() || 'Точка';
     const period = $('revisionPeriod')?.value;
     if (!period) { show('err','Выбери месяц ревизии.'); return; }
@@ -187,7 +187,7 @@
       const stores = data.stores?.length ? data.stores.join(' + ') : (scopes[pointKey] || point);
       const count = Number(data.summary?.revisionsCount || 0);
       if (count > 0) {
-        show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Найдено дат ревизии: <b>${count}</b>, документов: <b>${Number(data.summary?.documentsCount || 0)}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
+        show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Найдено дат проведённых ревизий: <b>${count}</b>, документов: <b>${Number(data.summary?.documentsCount || 0)}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
       } else {
         show('warn', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Соединение работает, но ревизии ещё не сопоставились с полями вашей версии iiko.${diagHtml(data)}`);
       }
