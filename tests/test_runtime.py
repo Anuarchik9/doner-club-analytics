@@ -79,6 +79,93 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path+'?from=invalid&to=invalid').status_code, 400)
 
+
+    def test_arai_revision_classifier_prefers_counter_context(self):
+        from revisions_data_v2 import _arai_revision_kind, _store_matches
+
+        self.assertEqual(
+            _arai_revision_kind([
+                'Шаурму Говяжий Сырой',
+                'Шаурму Куриный Сырой',
+                'Влажные салфетки',
+                'Pepsi 0,5л',
+                'Айран',
+            ]),
+            'counter',
+        )
+        self.assertEqual(
+            _arai_revision_kind([
+                'Шаурму Говяжий Сырой',
+                'Шаурму Куриный Сырой',
+                'Картофель ФРИ очищенный',
+            ]),
+            'kitchen',
+        )
+        self.assertTrue(_store_matches('arai_kitchen', 'Арай (АРАЙ общий)'))
+        self.assertTrue(_store_matches('arai_counter', 'Арай (АРАЙ общий)'))
+        self.assertFalse(_store_matches('arai_kitchen', 'Арай (Хоз.товары АРАЙ)'))
+        self.assertFalse(_store_matches('arai_counter', 'Арай (Хоз.товары АРАЙ)'))
+
+    def test_arai_revision_scopes_and_last_date(self):
+        from revisions_data_v5 import _build
+
+        names = {
+            'date': 'DateTime.DateTyped',
+            'transaction': 'TransactionType',
+            'document': 'Document',
+            'product': 'Product.Name',
+            'productId': None,
+            'unit': 'Product.MeasureUnit',
+            'stores': ['Store.Name'],
+            'accounts': ['Account.Name'],
+            'aggregates': ['Amount.StoreInOutTyped', 'Product.AvgSum'],
+        }
+
+        def row(date, document, store, product, delta=-1, cost=100):
+            return {
+                'DateTime.DateTyped': date,
+                'TransactionType': 'Инвентаризация',
+                'Document': document,
+                'Product.Name': product,
+                'Product.MeasureUnit': 'шт',
+                'Store.Name': store,
+                'Account.Name': 'Недостача инвентаризации',
+                'Amount.StoreInOutTyped': delta,
+                'Product.AvgSum': cost,
+            }
+
+        rows = [
+            # This later household document used to make the site report 22 Sep
+            # as Arai's latest revision. Household inventory is a separate scope.
+            row('2026-09-22', 'Arai0115', 'Арай (Хоз.товары АРАЙ)', 'Перчатки'),
+            # Arai counter/drinks revision. Raw meat can be present here too, so
+            # strong point markers must win at document level.
+            row('2026-09-18', 'Arai0114', 'Арай (АРАЙ общий)', 'Pepsi 0,5л'),
+            row('2026-09-18', 'Arai0114', 'Арай (АРАЙ общий)', 'Айран'),
+            row('2026-09-18', 'Arai0114', 'Арай (АРАЙ общий)', 'Шаурму Говяжий Сырой'),
+            # Separate kitchen revision on the same physical warehouse/date.
+            row('2026-09-18', 'Arai0112', 'Арай (АРАЙ общий)', 'Шаурму Говяжий Сырой'),
+            row('2026-09-18', 'Arai0112', 'Арай (АРАЙ общий)', 'Шаурму Куриный Сырой'),
+            row('2026-09-18', 'Arai0112', 'Арай (АРАЙ общий)', 'Картофель ФРИ очищенный'),
+        ]
+
+        counter = _build('arai_counter', '2026-09', rows, names, {})
+        kitchen = _build('arai_kitchen', '2026-09', rows, names, {})
+        legacy = _build('arai', '2026-09', rows, names, {})
+
+        self.assertEqual(counter['summary']['lastRevision'], '2026-09-18')
+        self.assertEqual(counter['summary']['documentsCount'], 1)
+        self.assertEqual(counter['history'][0]['documents'], ['Arai0114'])
+        self.assertEqual(counter['summary']['documentState'], 'posted')
+
+        self.assertEqual(kitchen['summary']['lastRevision'], '2026-09-18')
+        self.assertEqual(kitchen['summary']['documentsCount'], 1)
+        self.assertEqual(kitchen['history'][0]['documents'], ['Arai0112'])
+
+        self.assertEqual(legacy['summary']['lastRevision'], '2026-09-18')
+        self.assertNotIn('Arai0115', legacy['diagnostics']['matchedDocuments'])
+
+
     def test_telegram_nontext_commands(self):
         from telegram_bot import _command
         for value in (None, '', '   ', '\n'):
