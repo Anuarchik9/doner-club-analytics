@@ -76,7 +76,10 @@ def _remember_update(update_id):
 
 
 def _command(text):
-    first = str(text or "").strip().split(maxsplit=1)[0].lower()
+    parts = str(text or "").strip().split(maxsplit=1)
+    if not parts:
+        return ""
+    first = parts[0].lower()
     first = first.split("@", 1)[0]
     return first
 
@@ -121,12 +124,20 @@ def install_telegram_bot(app):
             return jsonify({"ok": False}), 403
 
         update = request.get_json(silent=True) or {}
+        if not isinstance(update, dict):
+            return jsonify({"ok": False}), 400
         update_id = update.get("update_id")
+        if update_id is not None and (not isinstance(update_id, int) or isinstance(update_id, bool)):
+            return jsonify({"ok": False}), 400
         if not _remember_update(update_id):
             return jsonify({"ok": True, "duplicate": True})
 
         message = update.get("message") or {}
+        if not isinstance(message, dict):
+            return jsonify({"ok": False}), 400
         chat = message.get("chat") or {}
+        if not isinstance(chat, dict):
+            return jsonify({"ok": False}), 400
         incoming_chat_id = str(chat.get("id") or "")
         if incoming_chat_id != str(allowed_chat_id):
             return jsonify({"ok": True, "ignored": "chat"})

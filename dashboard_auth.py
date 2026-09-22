@@ -5,7 +5,7 @@ import secrets
 import threading
 import time
 from datetime import timedelta
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import requests
 from flask import jsonify, redirect, request, session
@@ -95,7 +95,9 @@ def _authenticate_iiko(login, password):
 
 def _safe_next(value):
     value = (value or "").strip()
-    if not value.startswith("/") or value.startswith("//"):
+    decoded = unquote(value)
+    if (not decoded.startswith("/") or decoded.startswith("//")
+            or "\\" in decoded or any(ord(c) < 32 for c in decoded)):
         return "/static/dashboard-v2.html"
     if value.startswith("/login") or value.startswith("/logout"):
         return "/static/dashboard-v2.html"
@@ -211,6 +213,16 @@ def install_auth(app):
         "/departments",
         "/orders-access-test",
         "/olap-",
+        "/revision-data",
+        "/trend-analytics",
+        "/management-metrics",
+        "/cashier-analytics",
+        "/economics-analytics",
+        "/stop-loss",
+        "/channel-analytics",
+        "/sales-mix",
+        "/online-offline-trends",
+        "/procurement-",
         "/staff-analytics",
         "/staff-capability-check-",
     )
