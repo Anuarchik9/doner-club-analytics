@@ -16,6 +16,9 @@ from revisions_data_v2 import (
     _get_fields,
     _looks_like_inventory,
     _logout,
+    _month_bounds,
+    _arai_revision_kind,
+    _scope_revision_kind,
     _olap_post,
     _resolve,
     _row_store,
@@ -27,6 +30,18 @@ from revisions_data_v6 import _enrich
 
 BALANCE_PATH = "/api/v2/reports/balance/stores"
 STORE_PATH = "/api/corporation/stores"
+
+# The old iikoServer XML API exposes document exports by document type. Unlike
+# TRANSACTIONS OLAP, this source retains the document status (NEW/PROCESSED) and
+# therefore can mirror the iikoChain inventory register instead of guessing
+# inventories from accounting movements.
+INVENTORY_EXPORT_TYPES = (
+    "incomingInventory",
+    "inventory",
+    "stockTaking",
+    "inventoryDocument",
+    "inventoryAct",
+)
 
 
 def _norm(value):
@@ -109,6 +124,231 @@ def _inventory_document_times(scope, rows, names):
         # inventory document. If it is not, keep the earliest posting timestamp.
         if previous is None or stamp < previous:
             result[key] = stamp
+    return result
+
+
+def _xml_tag(element):
+    return str(element.tag or "").split("}")[-1].strip().lower()
+
+
+def _xml_text(element, *names):
+    wanted = {str(name).lower() for name in names}
+    for child in list(element):
+        if _xml_tag(child) in wanted:
+            value = (child.text or "").strip()
+            if value:
+                return value
+    return None
+
+
+def _xml_desc_text(element, *names):
+    wanted = {str(name).lower() for name in names}
+    for child in element.iter():
+        if child is element:
+            continue
+        if _xml_tag(child) in wanted:
+            value = (child.text or "").strip()
+            if value:
+                return value
+    return None
+
+
+def _product_names_map(base_url, token):
+    try:
+        response = requests.get(
+            f"{base_url}/api/v2/entities/products/list",
+            params={"key": token, "includeDeleted": "false"},
+            headers={"Accept": "application/json"},
+            timeout=40,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        items = payload if isinstance(payload, list) else (
+            payload.get("items") or payload.get("response") or []
+        )
+        result = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            product_id = str(
+                item.get("id") or item.get("productId") or item.get("uuid") or ""
+            ).strip()
+            name = str(item.get("name") or item.get("fullName") or "").strip()
+            if product_id and name:
+                result[product_id] = name
+        return result
+    except Exception:
+        return {}
+
+
+def _inventory_export_items(document_node, product_names):
+    names = []
+    product_ids = []
+    items_node = None
+    for child in list(document_node):
+        if _xml_tag(child) in ("items", "itemlist", "itemslist", "itemdtoes"):
+            items_node = child
+            break
+    if items_node is None:
+        return names, product_ids
+
+    for item in list(items_node):
+        if _xml_tag(item) not in ("item", "inventoryitem", "incominginventoryitemdto"):
+            continue
+        product_id = (
+            _xml_text(item, "productId", "product")
+            or _xml_desc_text(item, "productId", "id")
+            or ""
+        ).strip()
+        product_name = (
+            _xml_desc_text(item, "productName", "name")
+            or product_names.get(product_id)
+            or ""
+        ).strip()
+        if product_id:
+            product_ids.append(product_id)
+        if product_name and product_name not in names:
+            names.append(product_name)
+    return names, product_ids
+
+
+def _parse_inventory_export(xml_text, product_names):
+    root = ET.fromstring(xml_text)
+    documents = []
+    seen = set()
+    for node in root.iter():
+        number = _xml_text(node, "documentNumber", "number")
+        date_value = _xml_text(node, "dateIncoming", "date")
+        status = _xml_text(node, "status", "documentStatus")
+        if not number or not date_value:
+            continue
+        # Avoid treating nested item/product nodes as document headers.
+        key = (number, date_value)
+        if key in seen:
+            continue
+        seen.add(key)
+        store_id = (
+            _xml_text(node, "storeId", "store")
+            or _xml_desc_text(node, "storeId")
+            or ""
+        ).strip()
+        store_code = (_xml_text(node, "storeCode") or "").strip()
+        comment = (_xml_text(node, "comment") or "").strip()
+        product_names_list, product_ids = _inventory_export_items(node, product_names)
+        documents.append(
+            {
+                "document": number.strip(),
+                "dateTime": date_value.strip(),
+                "date": date_value.strip()[:10],
+                "status": (status or "UNKNOWN").strip().upper(),
+                "storeId": store_id,
+                "storeCode": store_code,
+                "comment": comment,
+                "productNames": product_names_list,
+                "productIds": product_ids,
+            }
+        )
+    return documents
+
+
+def _fetch_inventory_documents(base_url, token, period):
+    start, next_month = _month_bounds(period)
+    date_from = start[:10]
+    end_exclusive = datetime.fromisoformat(next_month[:19])
+    date_to = (end_exclusive - timedelta(days=1)).date().isoformat()
+    product_names = _product_names_map(base_url, token)
+    attempts = []
+
+    for document_type in INVENTORY_EXPORT_TYPES:
+        url = f"{base_url}/api/documents/export/{document_type}"
+        for params in (
+            {"key": token, "from": date_from, "to": date_to},
+            {"key": token, "dateFrom": date_from, "dateTo": date_to},
+        ):
+            try:
+                response = requests.get(url, params=params, timeout=45)
+                attempts.append(
+                    {
+                        "type": document_type,
+                        "params": "from/to" if "from" in params else "dateFrom/dateTo",
+                        "status": response.status_code,
+                    }
+                )
+                if not response.ok:
+                    continue
+                documents = _parse_inventory_export(response.text, product_names)
+                if documents:
+                    return documents, {
+                        "available": True,
+                        "type": document_type,
+                        "documents": len(documents),
+                        "attempts": attempts[-6:],
+                    }
+            except Exception as error:
+                attempts.append(
+                    {
+                        "type": document_type,
+                        "error": str(error)[:220],
+                    }
+                )
+    return [], {
+        "available": False,
+        "attempts": attempts[-10:],
+    }
+
+
+def _scope_inventory_documents(scope, documents, rows, names, stores):
+    store_by_id = {str(item.get("id") or ""): item for item in stores}
+    row_products = defaultdict(set)
+    document_field = names.get("document")
+    product_field = names.get("product")
+    if document_field and product_field:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            number = str(row.get(document_field) or "").strip()
+            product = str(row.get(product_field) or "").strip()
+            if number and product:
+                row_products[number].add(product)
+
+    required_kind = _scope_revision_kind(scope)
+    result = []
+    for raw in documents:
+        item = dict(raw)
+        store = store_by_id.get(str(item.get("storeId") or ""))
+        store_name = (
+            (store or {}).get("name")
+            or item.get("storeCode")
+            or item.get("storeId")
+            or ""
+        )
+        item["store"] = store_name
+        if not _store_matches(scope, store_name):
+            continue
+
+        product_names = list(item.get("productNames") or [])
+        if not product_names:
+            product_names = sorted(row_products.get(item.get("document")) or [])
+            item["productNames"] = product_names
+
+        detected_kind = _arai_revision_kind(product_names)
+        item["revisionKind"] = detected_kind
+        if required_kind and detected_kind != required_kind:
+            continue
+
+        item["processed"] = item.get("status") == "PROCESSED"
+        item["pending"] = item.get("status") in ("NEW", "SAVE", "UNKNOWN")
+        item["itemsPreview"] = ", ".join(product_names[:4])
+        item["itemsCount"] = len(product_names)
+        result.append(item)
+
+    result.sort(
+        key=lambda item: (
+            str(item.get("dateTime") or ""),
+            str(item.get("document") or ""),
+        ),
+        reverse=True,
+    )
     return result
 
 
@@ -427,9 +667,58 @@ def install_revisions_data_v7(app):
             names["dateTime"] = _resolve_datetime_field(fields)
             diagnostics = _discover(base_url, token, period, fields, names, scope)
             rows = _query_rows_with_time(base_url, token, period, fields, names, diagnostics)
+
+            # Source of truth for the inventory register/statuses. OLAP is still
+            # used for discrepancy amounts, but it is no longer allowed to invent
+            # inventory documents from unrelated Arai accounting movements.
+            inventory_documents, inventory_export = _fetch_inventory_documents(
+                base_url, token, period
+            )
+            stores = _load_stores(base_url, token)
+            scoped_documents = _scope_inventory_documents(
+                scope, inventory_documents, rows, names, stores
+            )
+
+            if scoped_documents:
+                processed_numbers = {
+                    item.get("document")
+                    for item in scoped_documents
+                    if item.get("status") == "PROCESSED" and item.get("document")
+                }
+                if processed_numbers and names.get("document"):
+                    rows = [
+                        row for row in rows
+                        if str(row.get(names["document"]) or "").strip()
+                        in processed_numbers
+                    ]
+
             result = _build_v5(scope, period, rows, names, diagnostics)
             result = _enrich(result)
             result["fieldMap"] = names
+            result["inventoryDocuments"] = scoped_documents
+            result["inventoryDocumentExport"] = inventory_export
+
+            processed_documents = [
+                item for item in scoped_documents
+                if item.get("status") == "PROCESSED"
+            ]
+            pending_documents = [
+                item for item in scoped_documents
+                if item.get("status") != "PROCESSED"
+            ]
+            if processed_documents:
+                processed_dates = sorted(
+                    {item.get("date") for item in processed_documents if item.get("date")},
+                    reverse=True,
+                )
+                summary = result.setdefault("summary", {})
+                summary["lastRevision"] = processed_dates[0] if processed_dates else None
+                summary["documentsCount"] = len(processed_documents)
+                summary["revisionsCount"] = len(processed_dates)
+                summary["pendingDocumentsCount"] = len(pending_documents)
+                summary["sourceOfTruth"] = "iiko inventory document export"
+                summary["documentState"] = "PROCESSED"
+
             doc_times = _inventory_document_times(scope, rows, names)
             try:
                 result = _attach_book_values(base_url, token, scope, result, doc_times)
