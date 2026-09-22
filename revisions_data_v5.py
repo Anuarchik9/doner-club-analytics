@@ -13,6 +13,8 @@ from revisions_data_v2 import (
     _query_rows,
     _row_store,
     _looks_like_inventory,
+    _arai_revision_kind,
+    _scope_revision_kind,
 )
 from revisions_data_v3 import _classified_value
 from revisions_data_v4 import _quantity_delta, _unit_cost
@@ -44,6 +46,29 @@ def _build(scope, period, rows, names, diagnostics):
     matched_rows = 0
     matched_stores = set()
     matched_documents = set()
+    excluded_documents = set()
+
+    # Classify Arai documents as a whole, not row-by-row. The point/cashier
+    # inventory can include raw meat/fries together with drinks and packaging,
+    # so document-level context is required.
+    required_kind = _scope_revision_kind(scope)
+    candidate_products = defaultdict(set)
+    candidate_rows = defaultdict(int)
+    if required_kind:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            store = _row_store(scope, row, names["stores"])
+            if not store or not _looks_like_inventory(scope, row, names):
+                continue
+            date_value = str(row.get(names["date"]) or "")[:10] or "Без даты"
+            document = str(row.get(names.get("document")) or "").strip() if names.get("document") else ""
+            document_label = document or "Без номера"
+            product_name = str(row.get(names["product"]) or "").strip()
+            key = (date_value, document_label, store)
+            if product_name:
+                candidate_products[key].add(product_name)
+            candidate_rows[key] += 1
 
     for row in rows:
         if not isinstance(row, dict):
@@ -58,6 +83,15 @@ def _build(scope, period, rows, names, diagnostics):
         date_value = str(row.get(names["date"]) or "")[:10] or "Без даты"
         document = str(row.get(names.get("document")) or "").strip() if names.get("document") else ""
         document_label = document or "Без номера"
+        doc_key = (date_value, document_label, store)
+
+        if required_kind:
+            detected_kind = _arai_revision_kind(candidate_products.get(doc_key) or ())
+            if detected_kind != required_kind:
+                if document:
+                    excluded_documents.add(document)
+                continue
+
         if document:
             matched_documents.add(document)
 
@@ -68,7 +102,6 @@ def _build(scope, period, rows, names, diagnostics):
         if names.get("unit"):
             unit = str(row.get(names["unit"]) or "").strip()
 
-        doc_key = (date_value, document_label, store)
         doc = documents[doc_key]
         doc["date"] = date_value
         doc["document"] = document_label
@@ -166,6 +199,9 @@ def _build(scope, period, rows, names, diagnostics):
             {
                 "document": doc["document"],
                 "store": doc["store"],
+                "revisionKind": required_kind or _arai_revision_kind(
+                    [line.get("name") for line in doc["products"].values()]
+                ),
                 "shortage": doc_shortage,
                 "surplus": doc_surplus,
                 "gross": reconstructed_total,
@@ -251,6 +287,8 @@ def _build(scope, period, rows, names, diagnostics):
 
     diagnostics = dict(diagnostics)
     diagnostics["matchedDocuments"] = sorted(matched_documents)[:80]
+    diagnostics["excludedDocuments"] = sorted(excluded_documents)[:80]
+    diagnostics["revisionKind"] = required_kind
     diagnostics["calculationMode"] = "quantity delta × unit cost (iikoChain-compatible)"
 
     return {
@@ -273,6 +311,8 @@ def _build(scope, period, rows, names, diagnostics):
             "avgSurplusPerRevision": round(total_surplus / revisions_count, 2) if revisions_count else 0,
             "top5ShortageShare": round(top5_shortage / total_shortage * 100, 1) if total_shortage else 0,
             "top5SurplusShare": round(top5_surplus / total_surplus * 100, 1) if total_surplus else 0,
+            "documentState": "posted",
+            "revisionKind": required_kind,
         },
         "history": history,
         "revisionDetails": revision_details,
@@ -286,7 +326,11 @@ def _build(scope, period, rows, names, diagnostics):
             "desktopDocumentTotalAvailable": False,
             "note": "Денежное расхождение реконструируется из тех же величин, которые видны в iikoChain. Денежные Incoming/Outgoing проводки не суммируются, чтобы не удваивать две стороны бухгалтерской записи.",
         },
-        "note": "Недостачи и излишки считаются по знаку разницы количества: минус — недостача, плюс — излишек. Сумма = |разница количества| × себестоимость за единицу.",
+        "note": (
+            "Недостачи и излишки считаются только по проведённым проводкам TRANSACTIONS OLAP: "
+            "минус — недостача, плюс — излишек. Синие непроведённые документы iikoChain "
+            "не попадают в финансовый итог. Сумма = |разница количества| × себестоимость за единицу."
+        ),
     }
 
 
