@@ -46,7 +46,10 @@
       .dc-payment-bar-track{height:14px;border-radius:999px;background:#222;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
       .dc-payment-bar-fill{height:100%;min-width:2px;border-radius:999px;background:linear-gradient(90deg,#ff5a1f,#ff7d48)}
       .dc-payment-bar-value{text-align:right;font-size:11px;color:#bdbdbd;white-space:nowrap}
-      .dc-payment-bar-value strong{color:#fff;font-size:12px;margin-right:7px}
+      .dc-payment-bar-value strong{color:#fff;font-size:12px}
+      .dc-payment-bar-row{position:relative}
+      .dc-payment-chart-tooltip{position:fixed;z-index:9999;pointer-events:none;display:none;min-width:132px;padding:9px 11px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:#0c0c0c;box-shadow:0 10px 28px rgba(0,0,0,.35);font-size:10px;color:#aaa;transform:translate(12px,-50%)}
+      .dc-payment-chart-tooltip b{display:block;margin-top:3px;font-size:15px;color:#ff7846}
       .dc-payment-chart-foot{margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;justify-content:space-between;gap:12px;color:#777;font-size:10px}
       @media(max-width:760px){
         .dc-payment-head,.dc-payment-chart-title{align-items:flex-start;flex-direction:column}
@@ -112,7 +115,8 @@
       <div class="dc-payment-chart" id="paymentChartRows">
         <div class="dc-payment-empty">Данные появятся после загрузки отчёта.</div>
       </div>
-      <div class="dc-payment-chart-foot"><span>Полоса показывает долю от общей выручки.</span><span id="paymentChartCoverage"></span></div>
+      <div class="dc-payment-chart-tooltip" id="paymentChartTooltip"></div>
+      <div class="dc-payment-chart-foot"><span>Наведите курсор на строку, чтобы увидеть процент от общей выручки.</span><span id="paymentChartCoverage"></span></div>
     `;
 
     trend.insertAdjacentElement('afterend', head);
@@ -187,13 +191,32 @@
     chartRoot.innerHTML = rows.length ? rows.map(item => {
       const share = Math.max(0, Math.min(100, Number(item.share || 0)));
       return `
-        <div class="dc-payment-bar-row" title="${esc(item.label)}: ${money(item.revenue)} · ${pct(share)}">
+        <div class="dc-payment-bar-row" data-payment-label="${esc(item.label)}" data-payment-share="${share}" data-payment-revenue="${Number(item.revenue || 0)}">
           <div class="dc-payment-bar-label">${esc(item.label)}</div>
           <div class="dc-payment-bar-track"><div class="dc-payment-bar-fill" style="width:${share}%"></div></div>
-          <div class="dc-payment-bar-value"><strong>${money(item.revenue)}</strong>${pct(share)}</div>
+          <div class="dc-payment-bar-value"><strong>${money(item.revenue)}</strong></div>
         </div>
       `;
     }).join('') : '<div class="dc-payment-empty">Нет данных для диаграммы.</div>';
+
+    const tooltip = byId('paymentChartTooltip');
+    const hideTooltip = () => { if (tooltip) tooltip.style.display = 'none'; };
+    chartRoot.querySelectorAll('.dc-payment-bar-row').forEach(row => {
+      const showTooltip = event => {
+        if (!tooltip) return;
+        const share = Number(row.dataset.paymentShare || 0);
+        tooltip.innerHTML = `<span>Доля от общей выручки</span><b>${pct(share)}</b>`;
+        const x = event.clientX || row.getBoundingClientRect().right;
+        const y = event.clientY || (row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2);
+        tooltip.style.left = `${Math.min(window.innerWidth - 165, Math.max(8, x))}px`;
+        tooltip.style.top = `${Math.min(window.innerHeight - 45, Math.max(45, y))}px`;
+        tooltip.style.display = 'block';
+      };
+      row.addEventListener('pointerenter', showTooltip);
+      row.addEventListener('pointermove', showTooltip);
+      row.addEventListener('pointerleave', hideTooltip);
+      row.addEventListener('pointerdown', showTooltip);
+    });
 
     if (byId('paymentChartCoverage')) {
       const coverage = total > 0 ? detailed / total * 100 : 0;
