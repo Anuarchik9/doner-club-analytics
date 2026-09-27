@@ -31,7 +31,7 @@
     .oo-section-head h2{margin:0;font-size:20px}.oo-head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
     .oo-source{display:inline-flex;align-items:center;gap:6px;border:1px solid #304a3c;color:#9fe4bf;border-radius:999px;padding:5px 9px;font-size:10px}.oo-source:before{content:"";width:6px;height:6px;border-radius:50%;background:#4bd396}
     .oo-mode{display:flex;gap:4px;padding:4px;border:1px solid #303030;border-radius:12px;background:#0b0b0b}.oo-mode button{height:30px;border:0;border-radius:8px;background:transparent;color:#999;padding:0 12px;font:inherit;font-size:11px;font-weight:800;cursor:pointer}.oo-mode button.active{background:rgba(255,90,31,.14);color:#fff;box-shadow:inset 0 0 0 1px #8d3d20}
-    .oo-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.oo-panel{padding:20px;min-width:0}.oo-panel.wide{grid-column:1/-1}.oo-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}.oo-panel-head h3{margin:0;font-size:16px}.oo-panel-head .muted{font-size:11px;margin-top:4px;line-height:1.4}
+    .oo-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.oo-panel{padding:20px;min-width:0}.oo-panel.wide{grid-column:1/-1}.oo-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}.oo-panel-head h3{margin:0;font-size:16px}.oo-panel-head .muted{font-size:11px;margin-top:4px;line-height:1.4}.oo-compare-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}.oo-compare-select{height:34px;min-width:150px;border:1px solid #343434;border-radius:10px;background:#0d0d0d;color:#eee;padding:0 28px 0 10px;font:inherit;font-size:11px;font-weight:800;outline:none}.oo-compare-select:focus{border-color:#7a452f;box-shadow:0 0 0 2px rgba(255,90,31,.12)}
     .oo-legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:#999;font-size:10px}.oo-legend span{display:inline-flex;align-items:center;gap:6px}.oo-legend i{width:16px;height:3px;border-radius:6px;display:inline-block}.oo-legend .online i{background:#4d9fff}.oo-legend .offline i{background:#ff685e}
     .oo-chart{height:285px;position:relative;margin-top:9px}.oo-chart svg{display:block;width:100%;height:100%;overflow:visible}.oo-gridline{stroke:#272727;stroke-width:1}.oo-axis{fill:#777;font-size:10px}.oo-line-online{fill:none;stroke:#4d9fff;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round}.oo-line-offline{fill:none;stroke:#ff685e;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round}.oo-dot-online{fill:#4d9fff;stroke:#111;stroke-width:2.5}.oo-dot-offline{fill:#ff685e;stroke:#111;stroke-width:2.5}.oo-hit{fill:transparent;cursor:pointer}.oo-value-online,.oo-value-offline{font-size:8.5px;font-weight:800;text-anchor:middle}.oo-value-online{fill:#8bc3ff}.oo-value-offline{fill:#ff9992}
     .oo-tooltip{position:absolute;z-index:12;display:none;pointer-events:none;transform:translate(-50%,-108%);min-width:170px;padding:10px 12px;border:1px solid #383838;border-radius:12px;background:rgba(8,8,8,.97);box-shadow:0 12px 34px rgba(0,0,0,.5);font-size:11px;color:#aaa;white-space:nowrap}.oo-tooltip b{display:block;color:#fff;font-size:12px;margin-bottom:6px}.oo-tooltip .on{color:#8bc3ff}.oo-tooltip .off{color:#ff9992}.oo-tooltip strong{color:inherit}.oo-loading{height:255px;display:grid;place-items:center;color:#8e8e88;font-size:12px}.oo-note{margin-top:8px;color:#777;font-size:10px;line-height:1.45}.oo-current{color:#ff9d73}
@@ -44,6 +44,21 @@
   let mode = 'days';
   let requestNo = 0;
   let uiReady = false;
+  let compareOffset = 2;
+
+  function fillCompareSelect(){
+    const select=$('ooCompareMonth');
+    if(!select||select.options.length)return;
+    const now=new Date();
+    for(let offset=1;offset<=11;offset++){
+      const d=new Date(now.getFullYear(),now.getMonth()-offset,1);
+      let label=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric'}).format(d);
+      label=label.charAt(0).toUpperCase()+label.slice(1);
+      const option=document.createElement('option');
+      option.value=String(offset);option.textContent=label;option.selected=offset===compareOffset;select.appendChild(option);
+    }
+    select.addEventListener('change',()=>{compareOffset=Math.max(1,Math.min(11,Number(select.value)||2));loadData();});
+  }
 
   function legend(){
     return '<div class="oo-legend"><span class="online"><i></i>Онлайн</span><span class="offline"><i></i>Оффлайн</span></div>';
@@ -76,7 +91,7 @@
         <div class="oo-chart" id="ooCurrentChart"><div class="oo-loading">Получаем онлайн/оффлайн продажи…</div></div>
       </div>
       <div class="panel oo-panel" id="ooComparePanel">
-        <div class="oo-panel-head"><div><h3 id="ooCompareTitle">Месяц сравнения</h3><div class="muted" id="ooCompareSub">Онлайн и оффлайн выручка по дням</div></div>${legend()}</div>
+        <div class="oo-panel-head"><div><h3 id="ooCompareTitle">Месяц сравнения</h3><div class="muted" id="ooCompareSub">Онлайн и оффлайн выручка по дням</div></div><div class="oo-compare-tools"><select id="ooCompareMonth" class="oo-compare-select" aria-label="Месяц сравнения"></select>${legend()}</div></div>
         <div class="oo-chart" id="ooCompareChart"><div class="oo-loading">Получаем сравнение…</div></div>
       </div>
       <div class="panel oo-panel wide" id="ooSharePanel">
@@ -87,6 +102,8 @@
 
     anchor.insertAdjacentElement('afterend', head);
     head.insertAdjacentElement('afterend', block);
+
+    fillCompareSelect();
 
     head.querySelectorAll('.oo-mode button').forEach(button => {
       button.addEventListener('click', () => {
@@ -208,7 +225,9 @@
     if(!ensureUI()) return;
     const point=$('point')?.value;
     if(!point) return;
-    const compareOffset=Number($('trendCompareMonth')?.value||2);
+    const externalSelect=$('trendCompareMonth');
+    if(externalSelect){const value=Number(externalSelect.value||compareOffset);if(value>=1&&value<=11)compareOffset=value;}
+    if($('ooCompareMonth'))$('ooCompareMonth').value=String(compareOffset);
     const myRequest=++requestNo;
     setLoading();
     try{
@@ -226,7 +245,7 @@
 
   function bind(){
     if(!ensureUI()) return false;
-    $('trendCompareMonth')?.addEventListener('change',loadData);
+    $('trendCompareMonth')?.addEventListener('change',()=>{const value=Number($('trendCompareMonth')?.value||compareOffset);if(value>=1&&value<=11){compareOffset=value;if($('ooCompareMonth'))$('ooCompareMonth').value=String(compareOffset);}loadData();});
     $('point')?.addEventListener('change',loadData);
     window.addEventListener('dc:points-changed',loadData);
     window.addEventListener('resize',()=>{if(state)renderAll()});
