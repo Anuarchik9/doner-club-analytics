@@ -27,12 +27,12 @@
       .dc-payment-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:20px 0 10px}
       .dc-payment-head h2{margin:0;font-size:20px}
       .dc-payment-head span{font-size:10px;color:var(--muted,#777)}
-      .dc-payment-panel{border:1px solid var(--line,#2b2b2b);border-radius:20px;background:linear-gradient(160deg,#151515,#101010);padding:8px 18px}
-      .dc-payment-row{display:grid;grid-template-columns:minmax(180px,1fr) auto 86px;align-items:center;gap:18px;min-height:54px;border-bottom:1px solid rgba(255,255,255,.07)}
-      .dc-payment-row:last-child{border-bottom:0}
-      .dc-payment-name{font-size:13px;font-weight:850;color:#f1f1f1}
-      .dc-payment-amount{font-size:15px;font-weight:950;color:#fff;white-space:nowrap}
-      .dc-payment-share{text-align:right;font-size:13px;font-weight:900;color:#ff7a45;white-space:nowrap}
+      .dc-payment-panel{border:1px solid var(--line,#2b2b2b);border-radius:20px;background:linear-gradient(160deg,#151515,#101010);padding:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+      .dc-payment-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'name name' 'amount share';align-items:center;gap:5px 10px;min-height:70px;padding:10px 12px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(255,255,255,.015)}
+      .dc-payment-row:last-child{border-bottom:1px solid rgba(255,255,255,.07)}
+      .dc-payment-name{grid-area:name;font-size:12px;font-weight:850;color:#f1f1f1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .dc-payment-amount{grid-area:amount;font-size:14px;font-weight:950;color:#fff;white-space:nowrap}
+      .dc-payment-share{grid-area:share;text-align:right;font-size:12px;font-weight:900;color:#ff7a45;white-space:nowrap}
       .dc-payment-empty{padding:24px 4px;color:var(--muted,#777);font-size:12px}
       .dc-payment-note{margin-top:8px;color:#777;font-size:10px;line-height:1.45}
 
@@ -53,10 +53,11 @@
       .dc-payment-chart-foot{margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;justify-content:space-between;gap:12px;color:#777;font-size:10px}
       @media(max-width:760px){
         .dc-payment-head,.dc-payment-chart-title{align-items:flex-start;flex-direction:column}
-        .dc-payment-row{grid-template-columns:1fr auto;gap:5px 12px;padding:10px 0}
-        .dc-payment-name{grid-column:1}
-        .dc-payment-amount{grid-column:1}
-        .dc-payment-share{grid-column:2;grid-row:1/3;align-self:center}
+        .dc-payment-panel{grid-template-columns:1fr}
+        .dc-payment-row{grid-template-columns:1fr auto;grid-template-areas:'name share' 'amount share';gap:5px 12px;padding:10px 12px}
+        .dc-payment-name{grid-area:name}
+        .dc-payment-amount{grid-area:amount}
+        .dc-payment-share{grid-area:share;align-self:center}
         .dc-payment-bar-row{grid-template-columns:1fr 92px;gap:7px 10px}
         .dc-payment-bar-label{grid-column:1/3}
         .dc-payment-bar-track{grid-column:1}
