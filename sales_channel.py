@@ -337,6 +337,56 @@ def _build_mix(point, date_from, date_to):
                 "share": round(revenue / recognized * 100, 1) if recognized else 0,
             }
 
+        channels = breakdown["channels"]
+        detail_order = (
+            "yandex",
+            "wolt",
+            "glovo",
+            "chocofood",
+            "starter",
+            "kaspi_qr",
+            "jusan_card",
+            "bcc_card",
+            "card",
+            "cash",
+            "call_center",
+        )
+        detail_labels = {
+            "yandex": "Яндекс Еда",
+            "wolt": "Wolt",
+            "glovo": "Glovo",
+            "chocofood": "Chocofood",
+            "starter": "Starter",
+            "kaspi_qr": "Kaspi QR",
+            "jusan_card": "Карта — Jusan",
+            "bcc_card": "Карта — CenterCredit / BCC",
+            "card": "Оплата картой",
+            "cash": "Наличные",
+            "call_center": "CALL CENTER",
+        }
+        total_revenue = round(
+            sum(
+                float(item.get("revenue", 0) or 0)
+                for key, item in channels.items()
+                if key != "excluded"
+            ),
+            2,
+        )
+        payment_details = []
+        for channel_key in detail_order:
+            item = channels.get(channel_key) or {}
+            revenue = float(item.get("revenue", 0) or 0)
+            if revenue <= 0:
+                continue
+            payment_details.append({
+                "key": channel_key,
+                "label": detail_labels[channel_key],
+                "group": CHANNELS[channel_key]["group"],
+                "revenue": round(revenue, 2),
+                "checks": round(float(item.get("checks", 0) or 0), 3),
+                "share": round(revenue / total_revenue * 100, 2) if total_revenue else 0,
+            })
+
         result = {
             "success": True,
             "point": {
@@ -353,7 +403,9 @@ def _build_mix(point, date_from, date_to):
             "offline": summary(offline),
             "excluded": summary(excluded),
             "other": summary(other),
-            "channels": breakdown["channels"],
+            "channels": channels,
+            "paymentDetails": payment_details,
+            "totalRevenue": total_revenue,
             "dimensionValues": breakdown["dimensionValues"],
             "rules": {
                 "online": ["Glovo", "Wolt", "Yandex", "Chocofood", "Starter (без баллов)"],
@@ -564,6 +616,8 @@ def _filter_ui_script():
   }}
   function renderMix(mix,a,b){{
     if(!mix||mix._error){{
+      window.__dcSalesMixPayload={{mix:mix||{{_error:'unknown'}},from:a,to:b}};
+      window.dispatchEvent(new CustomEvent('dc:sales-mix',{{detail:window.__dcSalesMixPayload}}));
       if($('onlineSales'))$('onlineSales').textContent='—';
       if($('offlineSales'))$('offlineSales').textContent='—';
       if($('onlineSalesSub'))$('onlineSalesSub').textContent='Не удалось загрузить';
@@ -580,6 +634,8 @@ def _filter_ui_script():
     if(Number(excluded.revenue||0)>0)note+=` Баллы/бонусы исключены: ${{cash(excluded.revenue)}}.`;
     if(Number(other.revenue||0)>0)note+=` Не распределено: ${{cash(other.revenue)}}.`;
     $('mixNote').textContent=note;
+    window.__dcSalesMixPayload={{mix:mix,from:a,to:b}};
+    window.dispatchEvent(new CustomEvent('dc:sales-mix',{{detail:window.__dcSalesMixPayload}}));
   }}
   async function loadMix(point,a,b){{
     try{{return await get(`/sales-mix?point=${{encodeURIComponent(point)}}&from=${{a}}&to=${{b}}`)}}
@@ -707,7 +763,8 @@ def install_sales_channel(app):
                 body = response.get_data(as_text=True)
                 marker = "</body>"
                 if marker in body and "dc-channel-script" not in body:
-                    response.set_data(body.replace(marker, _filter_ui_script() + marker, 1))
+                    payment_script = '<script src="/static/payment-breakdown.js?v=20260928-1"></script>'
+                    response.set_data(body.replace(marker, _filter_ui_script() + payment_script + marker, 1))
                     response.headers.pop("Content-Length", None)
             except Exception:
                 pass
