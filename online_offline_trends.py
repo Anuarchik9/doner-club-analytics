@@ -305,7 +305,7 @@ def install_online_offline_trends(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/online-offline-trends.js?v=20260917-1"></script>'
+                tag = '<script src="/static/online-offline-trends.js?v=20260928-2"></script>'
                 if "online-offline-trends.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
