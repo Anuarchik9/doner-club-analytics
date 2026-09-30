@@ -117,18 +117,28 @@ def get_departments(force_refresh=False):
         return departments
 
 
+def point_search_terms(point):
+    normalized = str(point or "").strip().casefold()
+    aliases = {
+        "republic": ("republic", "respublika", "республика"),
+        "respublika": ("respublika", "republic", "республика"),
+        "республика": ("республика", "republic", "respublika"),
+    }
+    return aliases.get(normalized, (normalized,)) if normalized else ()
+
+
 def find_department(point):
-    point_normalized = point.strip().lower()
+    terms = point_search_terms(point)
     departments = get_departments()
     for department in departments:
         code = (department.get("code") or "").strip().lower()
         name = (department.get("name") or "").strip().lower()
-        if code == point_normalized or name == point_normalized:
+        if any(code == term or name == term for term in terms):
             return department, departments
     for department in departments:
         code = (department.get("code") or "").strip().lower()
         name = (department.get("name") or "").strip().lower()
-        if point_normalized in code or point_normalized in name:
+        if any(term in code or term in name for term in terms):
             return department, departments
     return None, departments
 
@@ -547,16 +557,16 @@ def iiko_server_departments(base_url, token):
 
 
 def find_iiko_server_department(point, departments):
-    normalized = (point or "").strip().lower()
+    terms = point_search_terms(point)
     for department in departments:
         code = (department.get("code") or "").strip().lower()
         name = (department.get("name") or "").strip().lower()
-        if code == normalized or name == normalized:
+        if any(code == term or name == term for term in terms):
             return department
     for department in departments:
         code = (department.get("code") or "").strip().lower()
         name = (department.get("name") or "").strip().lower()
-        if normalized and (normalized in code or normalized in name):
+        if any(term in code or term in name for term in terms):
             return department
     return None
 

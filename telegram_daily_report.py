@@ -10,7 +10,7 @@ import sales_channel
 
 TELEGRAM_API = "https://api.telegram.org"
 DEFAULT_POINTS = ("Arai", "Republic")
-POINT_LABELS = {"arai": "Арай", "republic": "Республика", "республика": "Республика"}
+POINT_LABELS = {"arai": "Арай", "republic": "Республика", "respublika": "Республика", "республика": "Республика"}
 
 
 def money(value):
@@ -161,7 +161,7 @@ def point_message(row):
     cur, receipt, mix = row["cur"], row["receipt"], row["mix"]
     point = html.escape(label(row["point"]))
     if not cur and not receipt and not mix:
-        return f"<b>{point}</b>\nДанных за день нет. Возможно, точка не работала или продаж в iiko не было."
+        return f"<b>{point}</b>\n⚠️ Не удалось получить данные iiko за день. Продажи не подтверждены; это не означает нулевую выручку."
 
     s = (cur or {}).get("summary") or {}
     rs = (receipt or {}).get("summary") or {}
@@ -243,7 +243,8 @@ def network_message(rows, day):
         f"Средний чек: <b>{money(revenue / checks if checks else 0)}</b>",
         f"Онлайн: <b>{money(online)}</b> · {num(on_share, 1)}%",
         f"Оффлайн: <b>{money(offline)}</b> · {num(off_share, 1)}%",
-        f"Точек с доступными данными: <b>{active}</b>",
+        f"Точек с доступными данными: <b>{active} из {len(rows)}</b>",
+        *(["⚠️ Итог неполный: часть данных iiko недоступна."] if any(row.get("errors") for row in rows) else []),
     ])
 
 
