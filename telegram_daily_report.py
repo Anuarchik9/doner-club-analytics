@@ -270,9 +270,12 @@ def meat_sizes(products):
         qty = float(p.get("quantity") or 0)
         if true_doner(name) or baton(name):
             key = meat(name)
-            row = meats.setdefault(key, {"revenue": 0.0, "qty": 0.0})
-            row["revenue"] += revenue
-            row["qty"] += qty
+            # Zero-revenue technical/embedded iiko rows without an identifiable
+            # meat type should not appear as real sold meat in the report.
+            if not (key == "Не определено" and revenue <= 0):
+                row = meats.setdefault(key, {"revenue": 0.0, "qty": 0.0})
+                row["revenue"] += revenue
+                row["qty"] += qty
         if true_doner(name):
             key = size(name)
             row = sizes.setdefault(key, {"revenue": 0.0, "qty": 0.0})
