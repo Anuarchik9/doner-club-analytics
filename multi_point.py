@@ -332,7 +332,7 @@ def install_multi_point(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/point-multiselect.js?v=20260917-1"></script>'
+                tag = '<script src="/static/point-multiselect.js?v=20261001-2"></script>'
                 if "point-multiselect.js" not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
