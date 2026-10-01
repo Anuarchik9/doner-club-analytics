@@ -74,7 +74,9 @@
   }
 
   function refresh(){
-    renderCategories();
+    // Category rows are owned by dashboard-category-readability.js.
+    // Do not rebuild them here, otherwise drink/baton rules and the expandable
+    // "ещё N" control get overwritten by this older renderer.
     syncMonthlyDynamic();
   }
 
