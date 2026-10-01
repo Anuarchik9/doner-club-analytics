@@ -38,19 +38,19 @@
 
       .dc-payment-chart-panel{border:1px solid var(--line,#2b2b2b);border-radius:20px;background:linear-gradient(160deg,#151515,#101010);padding:20px}
       .dc-payment-chart-title{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:18px}
-      .dc-payment-chart-title h3{margin:0;font-size:16px}
-      .dc-payment-chart-title span{font-size:10px;color:var(--muted,#777)}
+      .dc-payment-chart-title h3{margin:0;font-size:18px}
+      .dc-payment-chart-title span{font-size:12px;color:var(--muted,#777)}
       .dc-payment-chart{display:grid;gap:13px}
       .dc-payment-bar-row{display:grid;grid-template-columns:155px minmax(120px,1fr) 185px;gap:13px;align-items:center}
-      .dc-payment-bar-label{font-size:11px;font-weight:800;color:#dedede;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .dc-payment-bar-label{font-size:13px;font-weight:800;color:#dedede;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .dc-payment-bar-track{height:14px;border-radius:999px;background:#222;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
       .dc-payment-bar-fill{height:100%;min-width:2px;border-radius:999px;background:linear-gradient(90deg,#ff5a1f,#ff7d48)}
-      .dc-payment-bar-value{text-align:right;font-size:11px;color:#bdbdbd;white-space:nowrap}
-      .dc-payment-bar-value strong{color:#fff;font-size:12px}
+      .dc-payment-bar-value{text-align:right;font-size:13px;color:#bdbdbd;white-space:nowrap}
+      .dc-payment-bar-value strong{color:#fff;font-size:14px}
       .dc-payment-bar-row{position:relative}
-      .dc-payment-chart-tooltip{position:fixed;z-index:9999;pointer-events:none;display:none;min-width:132px;padding:9px 11px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:#0c0c0c;box-shadow:0 10px 28px rgba(0,0,0,.35);font-size:10px;color:#aaa;transform:translate(12px,-50%)}
+      .dc-payment-chart-tooltip{position:fixed;z-index:9999;pointer-events:none;display:none;min-width:132px;padding:10px 12px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:#0c0c0c;box-shadow:0 10px 28px rgba(0,0,0,.35);font-size:12px;color:#aaa;transform:translate(12px,-50%)}
       .dc-payment-chart-tooltip b{display:block;margin-top:3px;font-size:15px;color:#ff7846}
-      .dc-payment-chart-foot{margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;justify-content:space-between;gap:12px;color:#777;font-size:10px}
+      .dc-payment-chart-foot{margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;justify-content:space-between;gap:12px;color:#888;font-size:12px}
       @media(max-width:760px){
         .dc-payment-head,.dc-payment-chart-title{align-items:flex-start;flex-direction:column}
         .dc-payment-panel{grid-template-columns:1fr}
