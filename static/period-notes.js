@@ -37,7 +37,8 @@
     {from:'2026-05-06',to:'2026-05-06',date:'6 мая 2026',text:'Закрылась точка Сыганак.'},
     {from:'2026-09-15',to:'2026-09-16',date:'15.09 23:00 — 16.09 23:55',text:'Точка Арай была на стопе из-за ЧП по электроснабжению: на точке отсутствовал свет.',point:'arai'},
     {from:'2026-09-01',to:'2026-09-17',date:'Сентябрь 2026',text:'Точка Республика в этот период ещё не работала. Продаж и кассовых записей нет.',point:'republic'},
-    {from:'2026-09-01',to:'2026-09-30',date:'Сентябрь 2026',text:'Открытие новой точки Doner Club на Республике.',point:'republic'},
+    {from:'2026-09-30',to:'2026-09-30',date:'30 сентября 2026',text:'Точка Республики открылась 30 сентября.',point:'republic',exactSingleDay:'2026-09-30'},
+    {from:'2026-10-01',to:'2026-10-31',date:'Октябрь 2026',text:'Точка Республики открылась 30 сентября.',point:'republic'},
   ];
 
   const fromInput=document.getElementById('from');
@@ -78,7 +79,10 @@
   function render(){
     const a=fromInput.value,b=toInput.value||a;
     if(!a||!b){hide();return;}
-    const matches=NOTES.filter(n=>overlap(a,b,n.from,n.to)&&noteApplies(n));
+    const matches=NOTES.filter(n=>{
+      const dateMatch=n.exactSingleDay ? (a===n.exactSingleDay&&b===n.exactSingleDay) : overlap(a,b,n.from,n.to);
+      return dateMatch&&noteApplies(n);
+    });
     if(!matches.length){hide();return;}
     document.getElementById('periodNotesList').innerHTML=matches.map(n=>`<div class="period-note"><time>${esc(n.date)}</time><div>${esc(n.text)}</div></div>`).join('');
     wrap.classList.add('show');
