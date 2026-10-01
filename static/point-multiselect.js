@@ -83,6 +83,14 @@
     return Array.from(selected).map(v => byValue.get(v) || pretty(v));
   }
 
+  function updateHeroTitle(){
+    const title = document.getElementById('title');
+    if (!title) return;
+    const list = labels();
+    if (!list.length) return;
+    title.textContent = list.join(' + ');
+  }
+
   function summaryText(){
     const list = labels();
     if (!list.length) return 'Выберите точку';
@@ -120,6 +128,7 @@
       }
     } finally { syncing = false; }
     if (trigger) trigger.querySelector('.dc-point-trigger-value').textContent = summaryText();
+    updateHeroTitle();
     purgeCompetingTriggers();
     if (dispatch) {
       select.dispatchEvent(new Event('input', {bubbles:true}));
