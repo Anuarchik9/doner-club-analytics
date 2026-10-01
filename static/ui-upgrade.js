@@ -231,6 +231,10 @@
     return'Прочее';
   }
   function explainOtherCategory(){
+    // The canonical category renderer already provides the audited, expandable
+    // contents for "Другие позиции". This old fallback created a second
+    // non-clickable "ещё N" line and used stale category rules.
+    return;
     const list=document.getElementById('categoryList');
     if(!list)return;
     let data=null;
