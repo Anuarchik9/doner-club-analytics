@@ -16,7 +16,7 @@ def install_ui_upgrade(app):
             try:
                 response.direct_passthrough = False
                 body = response.get_data(as_text=True)
-                tag = '<script src="/static/ui-upgrade.js"></script>'
+                tag = '<script src="/static/ui-upgrade.js?v=20261001-3"></script>'
                 if tag not in body and "</body>" in body:
                     response.set_data(body.replace("</body>", tag + "</body>", 1))
                     response.headers.pop("Content-Length", None)
