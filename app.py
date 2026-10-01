@@ -358,7 +358,19 @@ def build_analytics(point, date_from, date_to):
         product_map = {}
         nomenclature_warning = str(error)
 
-    documents = get_sales_documents(organization_id, date_from, date_to)
+    try:
+        documents = get_sales_documents(organization_id, date_from, date_to)
+    except requests.RequestException as error:
+        payload = build_analytics_olap_fallback(
+            point,
+            date_from,
+            date_to,
+            department,
+            error,
+        )
+        _analytics_cache_set(cache_key, payload)
+        return payload, None, 200
+
     processed_documents = [
         document
         for document in documents
@@ -569,6 +581,176 @@ def find_iiko_server_department(point, departments):
         if any(term in code or term in name for term in terms):
             return department
     return None
+
+
+def build_analytics_olap_fallback(point, date_from, date_to, cloud_department, inventory_error):
+    """Build the main dashboard payload from iikoServer SALES OLAP.
+
+    The inventory sales-document API is not available for every department.
+    In that case the dashboard should still work from the same OLAP source that
+    powers receipts, payments, economics and the Telegram daily report.
+    """
+    all_dates = date_range(date_from, date_to)
+    base_url = None
+    token = None
+    try:
+        base_url, token = iiko_server_auth()
+        departments = iiko_server_departments(base_url, token)
+        department = find_iiko_server_department(point, departments)
+        if not department:
+            raise ValueError(f"Point '{point}' not found in iikoServer departments")
+
+        filters = {
+            "OpenDate.Typed": {
+                "filterType": "DateRange",
+                "periodType": "CUSTOM",
+                "from": date_from,
+                "to": date_to,
+                "includeLow": True,
+                "includeHigh": True,
+            },
+            "OrderDeleted": {
+                "filterType": "IncludeValues",
+                "values": ["NOT_DELETED"],
+            },
+            "Department.Id": {
+                "filterType": "IncludeValues",
+                "values": [department.get("id")],
+            },
+        }
+        body = {
+            "reportType": "SALES",
+            "buildSummary": False,
+            "groupByRowFields": ["CloseTime", "DishId", "DishName"],
+            "groupByColFields": [],
+            "aggregateFields": ["DishDiscountSumInt", "DishAmountInt"],
+            "filters": filters,
+        }
+        response = requests.post(
+            f"{base_url}/api/v2/reports/olap",
+            params={"key": token},
+            json=body,
+            headers={"Content-Type": "application/json"},
+            timeout=90,
+        )
+        response.raise_for_status()
+        data = response.json()
+        rows = data.get("data", []) if isinstance(data, dict) else []
+
+        totals = defaultdict(lambda: {"name": None, "quantity": 0.0, "revenue": 0.0})
+        daily = {
+            day: {
+                "date": day,
+                "revenue": 0.0,
+                "itemsRevenue": 0.0,
+                "quantity": 0.0,
+                "documentsCount": 0,
+            }
+            for day in all_dates
+        }
+
+        for row in rows:
+            name = str(row.get("DishName") or "").strip()
+            product_id = str(row.get("DishId") or name or "").strip()
+            if not product_id or not name:
+                continue
+
+            quantity = float(row.get("DishAmountInt") or 0)
+            revenue = float(row.get("DishDiscountSumInt") or 0)
+            item = totals[product_id]
+            item["name"] = item["name"] or name
+            item["quantity"] += quantity
+            item["revenue"] += revenue
+
+            close_time = row.get("CloseTime")
+            day = str(close_time)[:10] if close_time and len(str(close_time)) >= 10 else date_from
+            if day not in daily:
+                day = date_from
+            daily[day]["revenue"] += revenue
+            daily[day]["itemsRevenue"] += revenue
+            daily[day]["quantity"] += quantity
+
+        products = [
+            {
+                "productId": product_id,
+                "name": values.get("name") or "Позиция iiko",
+                "article": None,
+                "quantity": round(values["quantity"], 3),
+                "revenue": round(values["revenue"], 2),
+            }
+            for product_id, values in totals.items()
+        ]
+        by_revenue = sorted(products, key=lambda item: item["revenue"], reverse=True)
+        by_quantity = sorted(products, key=lambda item: item["quantity"], reverse=True)
+
+        revenue = round(sum(item["revenue"] for item in products), 2)
+        quantity = round(sum(item["quantity"] for item in products), 3)
+        days_count = len(all_dates)
+        error_response = getattr(inventory_error, "response", None)
+        inventory_warning = {
+            "type": inventory_error.__class__.__name__,
+            "statusCode": error_response.status_code if error_response is not None else None,
+            "details": (
+                error_response.text[:1000]
+                if error_response is not None
+                else str(inventory_error)
+            ),
+        }
+
+        daily_series = []
+        for day in sorted(daily):
+            item = daily[day]
+            daily_series.append({
+                "date": day,
+                "revenue": round(item["revenue"], 2),
+                "itemsRevenue": round(item["itemsRevenue"], 2),
+                "quantity": round(item["quantity"], 3),
+                "documentsCount": 0,
+            })
+
+        return {
+            "success": True,
+            "source": "iikoServer OLAP SALES fallback",
+            "point": {
+                "code": cloud_department.get("code"),
+                "name": cloud_department.get("name"),
+                "organizationId": cloud_department.get("organizationId"),
+                "iikoServerDepartmentId": department.get("id"),
+            },
+            "period": {"from": date_from, "to": date_to, "daysCount": days_count},
+            "summary": {
+                "documentsCount": 0,
+                "revenue": revenue,
+                "itemsRevenue": revenue,
+                "itemsQuantity": quantity,
+                "uniqueProducts": len(products),
+                "averageDailyRevenue": round(revenue / days_count, 2) if days_count else 0,
+            },
+            "daily": daily_series,
+            "topByRevenue": by_revenue[:20],
+            "topByQuantity": by_quantity[:20],
+            "products": by_revenue,
+            "warnings": {
+                "nomenclature": None,
+                "documentDetails": [],
+                "inventoryDocuments": inventory_warning,
+                "note": (
+                    "Inventory sales documents were unavailable for this point, "
+                    "so the dashboard used iikoServer SALES OLAP instead."
+                ),
+            },
+            "performance": {
+                "source": "iikoServer OLAP SALES",
+                "rows": len(rows),
+                "detailWorkers": 0,
+                "detailsRequested": 0,
+                "detailsLoaded": 0,
+            },
+            "cache": {"hit": False, "ttlSeconds": ANALYTICS_TTL_SECONDS},
+        }
+    finally:
+        if base_url and token:
+            iiko_server_logout(base_url, token)
 
 
 def run_iiko_server_olap(base_url, token, date_from, date_to, department_id=None):
