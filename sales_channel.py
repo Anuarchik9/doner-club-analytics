@@ -763,7 +763,7 @@ def install_sales_channel(app):
                 body = response.get_data(as_text=True)
                 marker = "</body>"
                 if marker in body and "dc-channel-script" not in body:
-                    payment_script = '<script src="/static/payment-breakdown.js?v=20260928-3"></script>'
+                    payment_script = '<script src="/static/payment-breakdown.js?v=20261001-4"></script>'
                     response.set_data(body.replace(marker, _filter_ui_script() + payment_script + marker, 1))
                     response.headers.pop("Content-Length", None)
             except Exception:
