@@ -91,6 +91,8 @@
       n.includes('айран') || n.includes('вода') || n.includes('сок') ||
       n.includes('чай') || n.includes('кофе') || n.includes('напит') ||
       n.includes('mirinda') || n.includes('миринда') ||
+      n.includes('dushes') || n.includes('дюшес') ||
+      n.includes('ava в ассортименте') || n.includes('ава в ассортименте') ||
       startsProduct(n,'кинза') || startsProduct(n,'kinza') ||
       startsProduct(n,'ава') || startsProduct(n,'ava') ||
       startsProduct(n,'пиала') || startsProduct(n,'piala') ||
