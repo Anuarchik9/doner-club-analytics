@@ -18,6 +18,52 @@ HISTORY_DAYS = 28
 _cache = {}
 _cache_lock = threading.Lock()
 _state_lock = threading.Lock()
+_stop_token_cache = {"value": None, "expires_at": 0.0, "credentials": None}
+_stop_token_lock = threading.Lock()
+
+
+def _stop_token(force_refresh=False):
+    # Inventory access does not imply access to the order API's organizations.
+    # Keep this credential and token independent of the other analytics blocks.
+    credentials = (
+        os.environ.get("IIKO_APP_ID"),
+        os.environ.get("IIKO_CLIENT_SECRET"),
+        (os.environ.get("IIKO_STOP_API_KEY") or "").strip(),
+    )
+    if not all(credentials):
+        raise RuntimeError("Stop-list iikoCloud credentials are not configured")
+    with _stop_token_lock:
+        if (not force_refresh and core._cache_valid(_stop_token_cache)
+                and _stop_token_cache["credentials"] == credentials):
+            return _stop_token_cache["value"]
+        response = requests.post(
+            f"{core.IIKO_BASE_URL}/api/v2/access_token",
+            json=dict(zip(("appId", "clientSecret", "apiKey"), credentials)),
+            timeout=20,
+        )
+        response.raise_for_status()
+        token = response.json()["token"]
+        _stop_token_cache.update(
+            value=token, expires_at=time.time() + core.TOKEN_TTL_SECONDS,
+            credentials=credentials,
+        )
+        return token
+
+
+def _stop_post(payload):
+    if not (os.environ.get("IIKO_STOP_API_KEY") or "").strip():
+        return core.iiko_post("/api/1/stop_lists", payload, timeout=30)
+    for attempt in range(2):
+        response = requests.post(
+            f"{core.IIKO_BASE_URL}/api/1/stop_lists",
+            headers={"Authorization": f"Bearer {_stop_token(force_refresh=bool(attempt))}",
+                     "Content-Type": "application/json"},
+            json=payload,
+            timeout=30,
+        )
+        if response.status_code != 401:
+            return response
+    return response
 
 
 def _cache_get(key):
@@ -129,13 +175,16 @@ def _flatten_stop_items(payload):
 
 
 def _current_stop_list(organization_id):
-    response = core.iiko_post(
-        "/api/1/stop_lists",
-        {"organizationIds": [organization_id]},
-        timeout=30,
-    )
+    response = _stop_post({"organizationIds": [organization_id]})
     response.raise_for_status()
-    return _flatten_stop_items(response.json())
+    payload = response.json()
+    if not isinstance(payload, dict) or not isinstance(payload.get("terminalGroupStopLists"), list):
+        raise RuntimeError("iiko returned an incomplete stop-list response")
+    groups = payload["terminalGroupStopLists"]
+    if any(not isinstance(group, dict) or group.get("organizationId") != organization_id
+           or not isinstance(group.get("items"), list) for group in groups):
+        raise RuntimeError("iiko returned a stop list for an unexpected organization")
+    return _flatten_stop_items(groups)
 
 
 def _iiko_server_history(point, product_ids, start_date, end_date):

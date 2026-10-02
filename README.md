@@ -15,6 +15,13 @@ with its existing worker hook. Installation is idempotent and preserves hook ord
 The tzdata dependency supplies Asia/Almaty on systems without a timezone database.
 
 Set the existing iiko credentials and DASHBOARD_SECRET_KEY in the environment.
+For stop lists, set `IIKO_STOP_API_KEY` in Render to an existing iikoCloud API key
+whose `/api/1/organizations` response includes both Arai and Republic. It uses
+the existing `IIKO_APP_ID` and `IIKO_CLIENT_SECRET`, with a separate token cache.
+`IIKO_API_KEY` remains the inventory/nomenclature credential for other blocks.
+Without the override, stop lists retain the existing shared-key behavior.
+The inventory organization tree can include departments that the same key cannot
+access through `/api/1/stop_lists`; an organization ID alone does not grant access.
 Without iiko credentials the login page and health check work, but real login and
 reports require iiko. No demo login or authentication bypass is provided.
 Production secure-cookie settings are unchanged; use local HTTPS when testing login
