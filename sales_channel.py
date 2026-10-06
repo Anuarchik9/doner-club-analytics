@@ -38,7 +38,7 @@ CHANNELS = {
     "call_center": {
         "label": "CALL CENTER",
         "group": "offline",
-        "tokens": ("call center", "call-center", "callcenter", "колл"),
+        "tokens": ("call center", "call-center", "callcenter", "call centre", "call-centre", "callcentre", "call_centre", "колл"),
     },
     "kaspi_qr": {
         "label": "Kaspi QR",
