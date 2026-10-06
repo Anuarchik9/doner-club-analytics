@@ -234,6 +234,8 @@ def install_auth(app):
         proxy_key = (os.environ.get("CRM_PROXY_KEY") or "").strip()
         supplied_proxy_key = (request.headers.get("X-Doner-CRM-Proxy") or "").strip()
         if proxy_key and secrets.compare_digest(proxy_key, supplied_proxy_key):
+            session["dc_authenticated"] = True
+            session["dc_user"] = "CRM"
             return None
         public_kiosk_paths = {
             "/kiosk",
