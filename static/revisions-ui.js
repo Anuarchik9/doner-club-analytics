@@ -108,7 +108,7 @@
       <div class="rev-quality-card"><span>Оборот расхождений</span><b>${money(s.grossVariance)}</b><small>Недостачи + излишки за период</small></div>
       <div class="rev-quality-card"><span>Средняя недостача / ревизию</span><b>${money(s.avgShortagePerRevision)}</b><small>Не общий итог, а среднее на одну дату ревизии</small></div>
       <div class="rev-quality-card"><span>Концентрация недостачи</span><b>${pct(s.top5ShortageShare)}</b><small>Доля TOP-5 позиций во всей недостаче</small></div>
-      <div class="rev-quality-card"><span>Документов найдено</span><b>${Number(s.documentsCount || 0).toLocaleString('ru-RU')}</b><small>Инвентаризационные документы iiko за период</small></div>`;
+      <div class="rev-quality-card"><span>Документов найдено</span><b>${Number(s.documentsCount || 0).toLocaleString('ru-RU')}</b><small>Проведённые документы по складским проводкам</small></div>`;
   }
 
   function renderIikoRegister(data) {
@@ -127,7 +127,7 @@
     if (!docs.length) {
       host.innerHTML = `
         <div class="iiko-register-head"><div><h3>Документы iikoChain</h3><p>Список инвентаризаций из реестра iiko, отдельно от аналитики проводок.</p></div></div>
-        <div class="iiko-reg-empty">Прямой реестр документов iikoServer пока не вернул данные. Ниже аналитика строится только по подтверждённым проводкам инвентаризации — номер документа сам по себе больше не считается ревизией.</div>`;
+        <div class="iiko-reg-empty">iikoServer API не отдаёт реестр инвентаризаций на чтение. Ниже показываются только проведённые ревизии, которые уже создали складские проводки недостачи/излишков. Непроведённые (синие) документы здесь не отображаются.</div>`;
       return;
     }
 
@@ -242,7 +242,7 @@
       const stores = data.stores?.length ? data.stores.join(' + ') : (scopes[pointKey] || point);
       const count = Number(data.summary?.revisionsCount || 0);
       if (count > 0) {
-        show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Найдено дат проведённых ревизий: <b>${count}</b>, документов: <b>${Number(data.summary?.documentsCount || 0)}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
+        show('ok', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>По проведённым складским проводкам найдено дат ревизий: <b>${count}</b>, документов: <b>${Number(data.summary?.documentsCount || 0)}</b>. Недостача: <b>${money(data.summary?.shortage)}</b>, излишки: <b>${money(data.summary?.surplus)}</b>.`);
       } else {
         show('warn', `<b>${point} · ${monthLabel(period)}</b><span class="scope">${escapeHtml(stores)}</span>Соединение работает, но ревизии ещё не сопоставились с полями вашей версии iiko.${diagHtml(data)}`);
       }
