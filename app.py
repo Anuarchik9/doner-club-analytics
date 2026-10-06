@@ -143,25 +143,46 @@ def find_department(point):
     return None, departments
 
 
+def _inventory_request_json(path, payload, timeout=35, attempts=3):
+    last_error = None
+    for attempt in range(max(1, attempts)):
+        try:
+            response = iiko_post(path, payload, timeout=timeout)
+            if response.status_code == 429 or response.status_code >= 500:
+                raise requests.HTTPError(response=response)
+            response.raise_for_status()
+            return response.json()
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as error:
+            last_error = error
+            response = getattr(error, "response", None)
+            status = response.status_code if response is not None else None
+            transient = (
+                isinstance(error, (requests.Timeout, requests.ConnectionError))
+                or status == 429
+                or (status is not None and status >= 500)
+            )
+            if not transient or attempt >= attempts - 1:
+                raise
+            time.sleep(1.25 * (attempt + 1))
+    raise last_error
+
+
 def get_sales_documents(organization_id, date_from, date_to):
-    response = iiko_post(
+    return _inventory_request_json(
         "/api/inventory/v1/sales_document/list",
         {"organizationId": organization_id, "from": date_from, "to": date_to},
         timeout=35,
+        attempts=3,
     )
-    response.raise_for_status()
-    return response.json()
 
 
 def get_sales_document(organization_id, document_id):
-    response = iiko_post(
+    return _inventory_request_json(
         "/api/inventory/v1/sales_document/get",
         {"organizationId": organization_id, "documentId": document_id},
         timeout=35,
+        attempts=3,
     )
-    response.raise_for_status()
-    return response.json()
-
 
 def get_products_map(force_refresh=False):
     if not force_refresh and _cache_valid(_products_cache):
