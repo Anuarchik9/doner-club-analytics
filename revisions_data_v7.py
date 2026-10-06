@@ -1,4 +1,6 @@
 import re
+import threading
+import time
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +32,34 @@ from revisions_data_v6 import _enrich
 
 BALANCE_PATH = "/api/v2/reports/balance/stores"
 STORE_PATH = "/api/corporation/stores"
+
+REVISION_CACHE_TTL = 5 * 60
+_revision_cache = {}
+_revision_cache_lock = threading.Lock()
+
+
+def _revision_cache_get(key):
+    with _revision_cache_lock:
+        item = _revision_cache.get(key)
+        if not item:
+            return None
+        if item.get("expiresAt", 0) <= time.time():
+            _revision_cache.pop(key, None)
+            return None
+        return item.get("value")
+
+
+def _revision_cache_set(key, value):
+    with _revision_cache_lock:
+        _revision_cache[key] = {
+            "value": value,
+            "expiresAt": time.time() + REVISION_CACHE_TTL,
+        }
+        if len(_revision_cache) > 30:
+            oldest = sorted(_revision_cache, key=lambda k: _revision_cache[k]["expiresAt"])[:8]
+            for old_key in oldest:
+                _revision_cache.pop(old_key, None)
+
 
 # The old iikoServer XML API exposes document exports by document type. Unlike
 # TRANSACTIONS OLAP, this source retains the document status (NEW/PROCESSED) and
@@ -659,6 +689,14 @@ def install_revisions_data_v7(app):
         except ValueError:
             return jsonify({"success": False, "message": "Period must be YYYY-MM"}), 400
 
+        cache_key = (scope, period)
+        if request.args.get("refresh") != "1":
+            cached = _revision_cache_get(cache_key)
+            if cached is not None:
+                payload = dict(cached)
+                payload["cache"] = {"hit": True, "ttlSeconds": REVISION_CACHE_TTL}
+                return jsonify(payload)
+
         base_url = token = None
         try:
             base_url, token = _auth()
@@ -668,70 +706,50 @@ def install_revisions_data_v7(app):
             diagnostics = _discover(base_url, token, period, fields, names, scope)
             rows = _query_rows_with_time(base_url, token, period, fields, names, diagnostics)
 
-            # Source of truth for the inventory register/statuses. OLAP is still
-            # used for discrepancy amounts, but it is no longer allowed to invent
-            # inventory documents from unrelated Arai accounting movements.
-            inventory_documents, inventory_export = _fetch_inventory_documents(
-                base_url, token, period
-            )
-            stores = _load_stores(base_url, token)
-            scoped_documents = _scope_inventory_documents(
-                scope, inventory_documents, rows, names, stores
-            )
-
-            if scoped_documents:
-                processed_numbers = {
-                    item.get("document")
-                    for item in scoped_documents
-                    if item.get("status") == "PROCESSED" and item.get("document")
-                }
-                if processed_numbers and names.get("document"):
-                    rows = [
-                        row for row in rows
-                        if str(row.get(names["document"]) or "").strip()
-                        in processed_numbers
-                    ]
-
+            # iikoServer does not expose a read/export endpoint for the
+            # incomingInventory register. The old implementation probed several
+            # guessed /api/documents/export/* URLs; every one is unsupported and
+            # returned 404. Do not pretend that those calls mirror the iikoChain
+            # register. For completed revisions we use the accounting source that
+            # iikoServer does expose: posted TRANSACTIONS OLAP movements on
+            # inventory / shortage / surplus markers. Unposted (blue) inventory
+            # documents are therefore intentionally not shown.
             result = _build_v5(scope, period, rows, names, diagnostics)
             result = _enrich(result)
             result["fieldMap"] = names
-            result["inventoryDocuments"] = scoped_documents
-            result["inventoryDocumentExport"] = inventory_export
+            result["source"] = "iikoServer TRANSACTIONS OLAP / posted inventory movements"
+            result["inventoryDocuments"] = []
+            result["inventoryDocumentExport"] = {
+                "available": False,
+                "supported": False,
+                "reason": "iikoServer API does not provide a read/export endpoint for incomingInventory documents",
+            }
+            result["revisionRegisterAccess"] = {
+                "available": False,
+                "completedRevisionsAvailable": True,
+                "pendingRevisionsAvailable": False,
+                "method": "posted accounting movements",
+            }
 
-            processed_documents = [
-                item for item in scoped_documents
-                if item.get("status") == "PROCESSED"
-            ]
-            pending_documents = [
-                item for item in scoped_documents
-                if item.get("status") != "PROCESSED"
-            ]
-            if processed_documents:
-                processed_dates = sorted(
-                    {item.get("date") for item in processed_documents if item.get("date")},
-                    reverse=True,
-                )
-                summary = result.setdefault("summary", {})
-                summary["lastRevision"] = processed_dates[0] if processed_dates else None
-                summary["documentsCount"] = len(processed_documents)
-                summary["revisionsCount"] = len(processed_dates)
-                summary["pendingDocumentsCount"] = len(pending_documents)
-                summary["sourceOfTruth"] = "iiko inventory document export"
-                summary["documentState"] = "PROCESSED"
+            summary = result.setdefault("summary", {})
+            summary["sourceOfTruth"] = "iikoServer TRANSACTIONS OLAP / posted inventory movements"
+            summary["documentState"] = "POSTED_ONLY"
+            summary["pendingDocumentsVisible"] = False
 
             doc_times = _inventory_document_times(scope, rows, names)
             try:
                 result = _attach_book_values(base_url, token, scope, result, doc_times)
             except Exception as balance_error:
-                # Book-value enrichment must never break the already working
-                # inventory analytics. Return the revision data and expose the
-                # balance error separately in the UI.
-                result.setdefault("summary", {})["bookBalanceAvailable"] = False
+                summary["bookBalanceAvailable"] = False
                 result["balanceDiagnostics"] = {
                     "available": False,
                     "dateTimeField": names.get("dateTime"),
                     "errors": [str(balance_error)],
                 }
+
+            cached_value = dict(result)
+            _revision_cache_set(cache_key, cached_value)
+            result["cache"] = {"hit": False, "ttlSeconds": REVISION_CACHE_TTL}
             return jsonify(result)
         except Exception as error:
             return jsonify(
@@ -746,3 +764,4 @@ def install_revisions_data_v7(app):
         finally:
             if base_url and token:
                 _logout(base_url, token)
+
