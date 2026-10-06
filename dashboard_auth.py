@@ -230,6 +230,11 @@ def install_auth(app):
     @app.before_request
     def _protect_dashboard():
         path = request.path
+
+        proxy_key = (os.environ.get("CRM_PROXY_KEY") or "").strip()
+        supplied_proxy_key = (request.headers.get("X-Doner-CRM-Proxy") or "").strip()
+        if proxy_key and secrets.compare_digest(proxy_key, supplied_proxy_key):
+            return None
         public_kiosk_paths = {
             "/kiosk",
             "/kiosk-menu",
